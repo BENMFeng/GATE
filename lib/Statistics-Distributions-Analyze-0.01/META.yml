@@ -1,0 +1,21 @@
+---
+name: Statistics-Distributions-Analyze
+version: 0.01
+author:
+  - 'Swansun Huang <swansun95@gmail.com>'
+abstract: 'A module to caculate Anova, T-test, etc'
+license: perl
+resources:
+  license: http://dev.perl.org/licenses/
+build_requires:
+  Statistics::Descriptive: 2.6
+  Statistics::Distributions: 1.02
+  Test::More: 0
+provides:
+  Statistics::Distributions::Analyze:
+    file: lib/Statistics/Distributions/Analyze.pm
+    version: 0.01
+generated_by: Module::Build version 0.2808
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.2.html
+  version: 1.2

@@ -1,0 +1,11 @@
+adapter_id	polluted_reads	empty_reads	adapter_sequence
+Multiplexing_Index_Read_Sequencing_Primer_5'	6 (100.000%)	0 (0.000%)	GATCGGAAGAGCACACGTCTGAACTCCAGTCAC
+Multiplexing_PCR_Primer_1.01_5'	0 (0.000%)	0 (0.000%)	AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT
+Multiplexing_Read_1_Sequencing_Primer_5'	0 (0.000%)	0 (0.000%)	ACACTCTTTCCCTACACGACGCTCTTCCGATCT
+Multiplexing_Read_2_Sequencing_Primer_5'	0 (0.000%)	0 (0.000%)	GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT
+P5_PCR_primer_flowcell_capture_site_5'	0 (0.000%)	0 (0.000%)	GATCTCGGTGGTCGCCGTATCATT
+P7_PCR_primer_flowcell_capture_site_5'	2 (33.333%)	0 (0.000%)	ATCTCGTATGCCGTCTTCTGCTTG
+P5_PCR_primer_flowcell_capture_site_3'	0 (0.000%)	0 (0.000%)	AATGATACGGCGACCACCGAGATCT
+P7_PCR_primer_flowcell_capture_site_3'	0 (0.000%)	0 (0.000%)	CAAGCAGAAGACGGCATACGAGAT
+
+total_reads: 6
