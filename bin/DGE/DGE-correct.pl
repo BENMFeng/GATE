@@ -160,7 +160,14 @@ close CON;
 # read RawData
 foreach my $sample(@name)
 {
-	open (RAW,"$Raw/$sample.fq") || die "Can't find $Raw/$sample.fq for open-reading\n";
+	if (-f "$Raw/$sample.fq")
+	{
+		open (RAW,"$Raw/$sample.fq") || die "Can't find $Raw/$sample.fq for open-reading\n";
+	}
+	elsif (-f "$Raw/$sample.fq")
+	{
+		open (RAW,"$Raw/$sample.fastq") || die "Can't find $Raw/$sample.fq for open-reading\n";
+	}
 	my ($seq,$qual);
 	open (C,">$sample.Correct.Tags") || die $!;
 	open (F,">$sample.Filter.Tags") || die $!;

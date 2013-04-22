@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9c,03-22-2013";
+$VERSION = "0.9e,04-16-2013";
 package GATE::Element;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
@@ -71,7 +71,9 @@ sub parseConfig($) {
 					$countSample{"$name $lib $type"}++;
 					${$self->{$name}{$lib}{$type}}[$countSample{"$name $lib $type"}-1]=checkPath($path);
 					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'Index'}=$index if (defined $index && $index ne "");
-					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'MergePE'}=$mergepe if (defined $mergepe && $mergepe ne "");
+					$self->{'idx'}{$lib}=1 if (defined $index && $index ne "");
+					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'MergePE'}=$mergepe if (defined $mergepe && $mergepe =~ /^[TY]/i);
+					$self->{'pemerge'}{$lib}=1 if (defined $mergepe && $mergepe ne "");
 					$RG{'LB'}=$lib if (defined $lib && !exists $RG{'LB'});
 					foreach my $rg(keys %RG)
 					{
@@ -141,7 +143,7 @@ sub parseDir($) {
 
 sub selectIdxFastq ($) {
 	my $self = shift;
-	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"}) {
+	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || !exists $self->{'idx'}) {
 		return "";
 	}
 	my $selectIdxFastq=$self->{"software:selectIdxFastq"};
@@ -155,7 +157,7 @@ sub selectIdxFastq ($) {
 	my $withIdx=0;
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
-		#next if (!exists $self->{$sm}{"Index"} || $self->{$sm}{"Index"} eq "");
+		next if (!exists $self->{'idx'}{$lib});
 		$Idx_cmd_multi.=$Idx_cmd_multi_head;
 		$Idx_cmd .= qq(echo `date`; echo "$lib"\n);
 		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
@@ -258,6 +260,7 @@ sub selectIdxFastq ($) {
 			chomp $Idx_cmd_multi;
 			$Idx_cmd_multi=~s/\&+$//;
 			$Idx_cmd_multi.="\n";
+			$Idx_cmd_multi.=print_check_process('selectIdxFastq');
 			return $Idx_cmd_multi;
 		}else{
 			return $Idx_cmd;
@@ -267,81 +270,162 @@ sub selectIdxFastq ($) {
 
 sub mergeOverlapPE($) {
 	my $self = shift;
-	if (!exists $self->{"software:mergeOverlapPE"} || !defined $self->{"software:mergeOverlapPE"}) {
+	if ( (!exists $self->{"software:mergeOverlapPE"} && (!exists $self->{"software:bwa-pemerge"})) || (!exists $self->{'pemerge'}) ) {
 		return "";
 	}
-	my $mergeOverlapPE=$self->{"software:mergeOverlapPE"};
-	my $moppara = $self->{"CustomSetting:mergeOverlapPE"};
-	my $mop_cmd = qq(echo `date`; echo "run mergeOverlapPE"\n);
-	$mop_cmd .= qq(cd $self->{"-workdir"}\n);
-	$mop_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$mop_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$mop_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
-	my $mop_cmd_multi_head=$mop_cmd;
-	my $mop_cmd_multi="";
-	my $withPE=0;
-	my @libraries=sort keys %{$self->{'LIB'}};
-	foreach my $lib(@libraries) {
-		$mop_cmd_multi.= $mop_cmd_multi_head;
-		$mop_cmd_multi .= qq(echo `date`; echo "$lib"\n);
-		$mop_cmd .= qq(echo `date`; echo "$lib"\n);
-		$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-		$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-		$mop_cmd .= "cd $lib\n";
-		$mop_cmd_multi .= "cd $lib && ";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
-		my @Reads1=();
-		@Reads1=@{$fq{1}} if (exists $fq{1});
-		my @Reads2=();
-		@Reads2=@{$fq{2}} if (exists $fq{2});
-		if (@Reads1==0 || @Reads2==0)
-		{
-			$mop_cmd .= "cd ../\n";
-			$mop_cmd_multi .= "cd ../";
-			if ($withPE % $self->{"CustomSetting:multithreads"}!=0)
+	if (exists $self->{"software:mergeOverlapPE"}) {
+		my $mergeOverlapPE=$self->{"software:mergeOverlapPE"};
+		my $moppara = $self->{"CustomSetting:mergeOverlapPE"};
+		my $mop_cmd = qq(echo `date`; echo "run mergeOverlapPE"\n);
+		$mop_cmd .= qq(cd $self->{"-workdir"}\n);
+		$mop_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+		$mop_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+		$mop_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+		my $mop_cmd_multi_head=$mop_cmd;
+		my $mop_cmd_multi="";
+		my $withPE=0;
+		my @libraries=sort keys %{$self->{'LIB'}};
+		foreach my $lib(@libraries) {
+			next if (!exists $self->{'pemerge'}{$lib});
+			$mop_cmd_multi.= $mop_cmd_multi_head;
+			$mop_cmd_multi .= qq(echo `date`; echo "$lib"\n);
+			$mop_cmd .= qq(echo `date`; echo "$lib"\n);
+			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$mop_cmd .= "cd $lib\n";
+			$mop_cmd_multi .= "cd $lib && ";
+			my %fq=getlibSeq($self->{"LIB"}{$lib});
+			my @Reads1=();
+			@Reads1=@{$fq{1}} if (exists $fq{1});
+			my @Reads2=();
+			@Reads2=@{$fq{2}} if (exists $fq{2});
+			if (@Reads1==0 || @Reads2==0)
+			{
+				$mop_cmd .= "cd ../\n";
+				$mop_cmd_multi .= "cd ../";
+				if ($withPE % $self->{"CustomSetting:multithreads"}!=0)
+				{
+					$mop_cmd_multi .= " &\n";
+				} else {
+					$mop_cmd_multi .= "\n";
+				}
+				next;
+			}
+			for (my $i=0;$i<@Reads1;$i++)
+			{
+				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
+					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
+					$mop_cmd .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara\n";
+					$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
+					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
+					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
+					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
+					foreach my $k(keys %{$self->{$lib}{'fq1'}{$i}})
+					{
+						$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{'fq'}}-1}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
+					}
+					$withPE++;
+				}
+			}
+			$mop_cmd .= "cd ..\n";
+			$mop_cmd_multi .= "cd .. && ";
+			$mop_cmd_multi .= "cd ..";
+			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
 			{
 				$mop_cmd_multi .= " &\n";
 			} else {
 				$mop_cmd_multi .= "\n";
 			}
-			next;
 		}
-		for (my $i=0;$i<@Reads1;$i++)
-		{
-			if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
-				my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
-				$mop_cmd .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara\n";
-				$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
-				${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
-				${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
-				push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
-				foreach my $k(keys %{$self->{$lib}{'fq1'}{$i}})
+		$mop_cmd .= "cd ..\n";
+		if ($withPE>0){
+			if (exists $self->{"CustomSetting:multimode"}) {
+				chomp $mop_cmd_multi;
+				$mop_cmd_multi =~ s/\&+$//;
+				$mop_cmd_multi .= "\n";
+				$mop_cmd_multi .= print_check_process('mergeOverlapPE');
+				return $mop_cmd_multi;
+			}else{
+				return $mop_cmd;
+			}
+		}
+	}elsif (exists $self->{"software:bwa-pemerge"}) {
+		my $bwapemerge=$self->{"software:bwa-pemerge"};
+		my $moppara = (exists $self->{"CustomSetting:bwa-pemerge"}) ? $self->{"CustomSetting:bwa-pemerge"} : "";
+		my $mop_cmd = qq(echo `date`; echo "run bwa-pemerge"\n);
+		$mop_cmd .= qq(cd $self->{"-workdir"}\n);
+		$mop_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+		$mop_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+		$mop_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+		my $mop_cmd_multi_head=$mop_cmd;
+		my $mop_cmd_multi="";
+		my $withPE=0;
+		my @libraries=sort keys %{$self->{'LIB'}};
+		foreach my $lib(@libraries) {
+			next if (!exists $self->{'pemerge'}{$lib});
+			$mop_cmd_multi.= $mop_cmd_multi_head;
+			$mop_cmd_multi .= qq(echo `date`; echo "$lib"\n);
+			$mop_cmd .= qq(echo `date`; echo "$lib"\n);
+			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$mop_cmd .= "cd $lib\n";
+			$mop_cmd_multi .= "cd $lib && ";
+			my %fq=getlibSeq($self->{"LIB"}{$lib});
+			my @Reads1=();
+			@Reads1=@{$fq{1}} if (exists $fq{1});
+			my @Reads2=();
+			@Reads2=@{$fq{2}} if (exists $fq{2});
+			if (@Reads1==0 || @Reads2==0)
+			{
+				$mop_cmd .= "cd ../\n";
+				$mop_cmd_multi .= "cd ../";
+				if ($withPE % $self->{"CustomSetting:multithreads"}!=0)
 				{
-					$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{'fq'}}-1}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
+					$mop_cmd_multi .= " &\n";
+				} else {
+					$mop_cmd_multi .= "\n";
 				}
-				$withPE++;
+				next;
+			}
+			for (my $i=0;$i<@Reads1;$i++)
+			{
+				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
+					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
+					$mop_cmd .= "$bwapemerge $moppara -m $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq\n";
+					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq && );
+					$mop_cmd .= qq($bwapemerge $moppara -u $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}'\n);
+					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' && );
+					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
+					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
+					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
+					foreach my $k(keys %{$self->{$lib}{'fq1'}{$i}})
+					{
+						$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{'fq'}}-1}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
+					}
+					$withPE++;
+				}
+			}
+			$mop_cmd .= "cd ..\n";
+			$mop_cmd_multi .= "cd .. && ";
+			$mop_cmd_multi .= "cd ..";
+			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
+			{
+				$mop_cmd_multi .= " &\n";
+			} else {
+				$mop_cmd_multi .= "\n";
 			}
 		}
 		$mop_cmd .= "cd ..\n";
-		$mop_cmd_multi .= "cd .. && ";
-		$mop_cmd_multi .= "cd ..";
-		if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
-		{
-			$mop_cmd_multi .= " &\n";
-		} else {
-			$mop_cmd_multi .= "\n";
-		}
-	}
-	$mop_cmd .= "cd ..\n";
-	if ($withPE>0){
-		if (exists $self->{"CustomSetting:multimode"}) {
-			chomp $mop_cmd_multi;
-			$mop_cmd_multi =~ s/\&+$//;
-			$mop_cmd_multi .= "\n";
-			$mop_cmd_multi .= qq(user=`whoami`\np=\`ps -u \$user -f |grep mergeOverlapPE |grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "mergeOverlapPE is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f |grep mergeOverlapPE |grep -v grep\`\ndone\n);
-			return $mop_cmd_multi;
-		}else{
-			return $mop_cmd;
+		if ($withPE>0){
+			if (exists $self->{"CustomSetting:multimode"}) {
+				chomp $mop_cmd_multi;
+				$mop_cmd_multi =~ s/\&+$//;
+				$mop_cmd_multi .= "\n";
+				$mop_cmd_multi .= print_check_process('mergeOverlapPE');
+				return $mop_cmd_multi;
+			}else{
+				return $mop_cmd;
+			}
 		}
 	}
 }
@@ -803,11 +887,22 @@ sub runFltAP ($) {
 	if (exists $self->{"CustomSetting:multimode"}) {
 		chomp $fltap_cmd_multi;
 		$fltap_cmd_multi=~s/\&+$//;
-		$fltap_cmd_multi.=~"\n";
+		$fltap_cmd_multi.="\n";
+		$fltap_cmd_multi.=print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
 		return $fltap_cmd_multi;
 	} else {
 		return $fltap_cmd;
 	}
+}
+
+sub print_check_process {
+	my @ary=@_;
+	my $out="";
+	foreach my $process(@ary)
+	{
+		$out .= qq(user=`whoami`\np=\`ps -u \$user -f |grep $process |grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f |grep $process |grep -v grep\`\ndone\n);
+	}
+	return $out;
 }
 
 sub runRSeQC ($) {
@@ -1079,12 +1174,12 @@ sub runBWA($$) {
 					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
 					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
 					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-					foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
 					{
 						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
 						{
 							$rg=~s/\'$//;
-							$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 						}
 					}
 					$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | $samtools view -Sbh - -o $lib.single.$k.bam\n";
@@ -1098,12 +1193,12 @@ sub runBWA($$) {
 					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
 					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
 					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-					foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
 					{
 						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
 						{
 							$rg=~s/\'$//;
-							$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 						}
 					}
 					$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | $samtools view -Sbh - -o $lib.single.bam\n";
@@ -1406,7 +1501,7 @@ sub callVar ($$) {
 			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			if (exists $self->{"database:dbSNP"})
 			{
-				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v1.csv);
+				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
 
 ## Generate AnlyzeCovariates Plots
@@ -1480,7 +1575,7 @@ sub callVar ($$) {
 #   -o output.bam
 				my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 				$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
 				$bam = $recalbam;
 
 ## Re-analysis of covariatesDetermine the covariates affecting base quality scores
@@ -1501,14 +1596,15 @@ sub callVar ($$) {
 				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v2.csv);
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
 			}
-			else
-			{
-				my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
-				$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
-				$bam = $recalbam;
-				$callVar_cmd .= qq($gatk -T BaseRecalibrator -I $recalbam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -BQSR $lib.recalibration_report.grp -o $lib.new_recal.grp --intermediate_csv_file $lib.recal.csv -plots $lib.comp.pdf\n);
-			}
+			#else
+			#{
+			#	$callVar_cmd .= qq($gatk -T BaseRecalibrator -I $bam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -o $lib.recalibration_report.grp --intermediate_csv_file $lib.recal.csv --plot_pdf_file $lib.comp.pdf);
+			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#	my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
+			#	$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
+			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+			#	$bam = $recalbam;
+			#}
 
 ## BAQ calmd
 			my $baqbam = "$1.baq.bam" if ($bam=~/([^\/\s]+)\.bam$/);
@@ -1540,8 +1636,12 @@ sub callVar ($$) {
 #-------------------
 #The GATK provides a tool to assess the depth of coverage over any number of intervals in a BAM file.
 #The coverage will be displayed in the output for every single position plus as an average over each interval specified.
-			$callVar_cmd .= "$gatk -I $bam -R \$REFERENCE -T DepthOfCoverage -L $lib --minMappingQ{uality 20 -o $lib.coverage.txt";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			if (exists $self->{"CustomSetting:TargetIntervalList"})
+			{
+				my $TL=checkPaht($self->{"CustomSetting:TargetIntervalList"});
+				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -L $TL --minMappingQuality 20 -omitLocusTable $lib.Locus.coverage.txt";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			}
 			#$bam=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
 			$self->{$lib}{"$ref-vcf"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.gatk.var.vcf";
@@ -1575,9 +1675,7 @@ sub callVar ($$) {
 
 
 sub runbowtie($$) {
-	my ($self,%atrr) = @_;
-	my $self=shift;
-	my $ref=shift;
+	my ($self,$ref) = @_;
 	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"}) {
 		return "";
 	}
@@ -1697,14 +1795,28 @@ sub runTopHat($) {
 			my @fq2=@{$fq{2}};
 			my $fq1=join ",",@fq1;
 			my $fq2=join ",",@fq2;
-			$tophat_cmd .= "\${tophat} \${tophatpara} -o $lib\_pe\_tophat \$REFERENCE $fq1 $fq2\n";
+			my $ID=(exists $self->{$lib}{'fq1'}{0}{'ID'})?$self->{$lib}{'fq1'}{0}{'ID'}:$lib;
+			my $SM=(exists $self->{$lib}{'fq1'}{0}{'SM'})?$self->{$lib}{'fq1'}{0}{'SM'}:$lib;
+			my $LB=(exists $self->{$lib}{'fq1'}{0}{'LB'})?$self->{$lib}{'fq1'}{0}{'LB'}:$lib;
+			my $PL=(exists $self->{$lib}{'fq1'}{0}{'PL'})?$self->{$lib}{'fq1'}{0}{'PL'}:"ILLUMINA";
+			my $PU=$self->{$lib}{'fq1'}{0}{'PU'} if (exists $self->{$lib}{'fq1'}{0}{'PU'});
+			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
+			$rg.=" --rg-platform-unit $PU" if (defined $PU);
+			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_pe\_tophat \$REFERENCE $fq1 $fq2\n";
 			$tophat_cmd .= "\${samtools} index $lib\_pe\_tophat/accepted_hits.bam\n";
-			push @bam,$self->{'-workdir'}."/tophat/$$lib\_pe\_tophat/accepted_hits.bam";
+			push @bam,$self->{'-workdir'}."/tophat/$lib\_pe\_tophat/accepted_hits.bam";
 		}
 		if (exists $fq{0} && @{$fq{0}}>0){
 			my @fq1=@{$fq{0}};
 			my $fq1=join ",",@fq1;
-			$tophat_cmd .= "\${tophat} \${tophatpara} -o $lib\_se\_tophat \$REFERENCE $fq1\n";
+			my $ID=(exists $self->{$lib}{'fq'}{0}{'ID'})?$self->{$lib}{'fq'}{0}{'ID'}:$lib;
+			my $SM=(exists $self->{$lib}{'fq'}{0}{'SM'})?$self->{$lib}{'fq'}{0}{'SM'}:$lib;
+			my $LB=(exists $self->{$lib}{'fq'}{0}{'LB'})?$self->{$lib}{'fq'}{0}{'LB'}:$lib;
+			my $PL=(exists $self->{$lib}{'fq'}{0}{'PL'})?$self->{$lib}{'fq'}{0}{'PL'}:"ILLUMINA";
+			my $PU=$self->{$lib}{'fq'}{0}{'PU'} if (exists $self->{$lib}{'fq'}{0}{'PU'});
+			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
+			$rg.=" --rg-platform-unit $PU" if (defined $PU);
+			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_se\_tophat \$REFERENCE $fq1\n";
 			$tophat_cmd .= "\${samtools} index $lib\_se\_tophat/accepted_hits.bam\n";
 			push @bam,$self->{'-workdir'}."/tophat/$lib\_se\_tophat/accepted_hits.bam";
 		}
@@ -1734,7 +1846,7 @@ sub runTopHat($) {
 					$tophat_cmd .=  qq(\${samtools} view -H $tophatbam |grep RG >> $lib.inh.sam\n);
 				}
 				$tophat_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
-				$tophat_cmd .=  "\${samtools}merge -f -nr -h $lib.inh.sam $lib.tophat.merge.bam $merge_bam";
+				$tophat_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.tophat.merge.bam $merge_bam\n";
 				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
 				if (exists $self->{$lib}{"$ref-bwabam"})
 				{
@@ -1986,6 +2098,22 @@ sub runCuffdiff($) {
 	return ($cuffdiff_cmd);
 }
 
+sub runBLAST ($) {
+	
+}
+
+sub runBLAT ($) {
+	
+}
+
+sub runLAST($) {
+	
+}
+
+sub runLASTZ($) {
+	
+}
+
 sub runcummeRbund ($) {
 	my $self = shift;
 }
@@ -2178,6 +2306,14 @@ sub runMACS ($) {
 		}
 	}
 
+}
+
+sub runBEDtools ($) {
+	
+}
+
+sub runCisGenome ($) {
+	
 }
 
 #Trinity.pl --seqType fq --JM 100G --left reads_1.fq  --right reads_2.fq --CPU 6

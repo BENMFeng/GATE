@@ -1,0 +1,9 @@
+#reads_id   reads_len   reads_start   reads_end   adapter_id   adapter_len   adapter_start   adapter_end   align_len   mismatch   gap
+HWI-ST1347:47:D1DMLACXX:1:1101:1588:2130 1:N:0:CATGGC	100	43	75	Multiplexing_Index_Read_Sequencing_Primer_5'	33	0	32	33	0	0
+HWI-ST1347:47:D1DMLACXX:1:1101:1911:2184 1:N:0:CATGGC	100	50	82	Multiplexing_Index_Read_Sequencing_Primer_5'	33	0	32	33	0	0
+HWI-ST1347:47:D1DMLACXX:1:1101:2011:2108 1:N:0:CATGGC	100	43	75	Multiplexing_Index_Read_Sequencing_Primer_5'	33	0	32	33	0	0
+HWI-ST1347:47:D1DMLACXX:1:1101:2138:2114 1:N:0:CATGGC	100	50	82	Multiplexing_Index_Read_Sequencing_Primer_5'	33	0	32	33	1	0
+HWI-ST1347:47:D1DMLACXX:1:1101:2424:2149 1:N:0:CATGGC	100	33	65	Multiplexing_Index_Read_Sequencing_Primer_5'	33	0	32	33	0	0
+HWI-ST1347:47:D1DMLACXX:1:1101:2329:2198 1:N:0:CATGGC	100	47	79	Multiplexing_Index_Read_Sequencing_Primer_5'	33	0	32	33	0	0
+HWI-ST1347:47:D1DMLACXX:1:1101:1911:2184 1:N:0:CATGGC	100	89	99	P7_PCR_primer_flowcell_capture_site_5'	24	0	10	11	0	0
+HWI-ST1347:47:D1DMLACXX:1:1101:2424:2149 1:N:0:CATGGC	100	72	95	P7_PCR_primer_flowcell_capture_site_5'	24	0	23	24	0	0

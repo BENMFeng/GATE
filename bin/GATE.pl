@@ -30,12 +30,13 @@ use GATE::Element;
 
 GATE.pl -- Genomics integrated Applications, also for Transcriptomics, Epigenetics experiential analysis pipeline
 Mainly situable for illumina sequencing platform
+Bioinformatics Stargate
 
 =head1 Version
 
 Author: BENM <binxiaofeng@gmail.com>
 
-Version: v0.1.5 nightly, Mar 18th, 2013
+Version: v0.1.6 nightly, Apr 1st, 2013
 
 =head1 Option
 
@@ -64,6 +65,7 @@ Version: v0.1.5 nightly, Mar 18th, 2013
     *fusion		gene fusion analysis
     *ncrna		non-coding RNA analysis
     *anno		annotation
+    *phylogen		phylogenetics analysis
     *stat		statistical analysis
     plot		plot figure
 
@@ -258,10 +260,10 @@ if (defined $Debug)
 
 # parsing command line
 my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
-qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as,
-var=>\&var, edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno
+qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
+edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, phylogen=>\&phylogen
 );
-my @cmd_ary = qw(qc aln var exp diff as);
+my @cmd_ary = qw(qc aln var exp diff as plot);
 
 # make jobs submit shell scripts
 #my %custom_cmd = ();

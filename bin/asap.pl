@@ -361,6 +361,7 @@ sub detectASevent {
 	my @chrAry=sort keys %{$genes->{'chr'}};
 	foreach my $chr(@chrAry) {
 		print STDERR "$chr\: $genes->{'chr'}{$chr} genes related with transcripts\n" if (defined $Verbose);
+		next if (!exists $genes->{$chr} || @{$genes->{$chr}}==0);
 		for (my $i=0;$i<@{$genes->{$chr}};$i++) {
 			my %geneStr=();
 			my ($j,$start,$end,$strand,$info,$K_p)=@{${$genes->{$chr}}[$i]};

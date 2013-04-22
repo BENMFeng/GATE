@@ -4,7 +4,7 @@ use warnings;
 use Getopt::Long;
 my %opts;
 my ($Prefix,$Seed,$PE_strand,$QFormat,$Qth,$LowQ,$MaxLoq,$Diffbase,$Help);
-GetOptions(\%opts,"prefix:s"=>\$Prefix,"seed:i"=>\$Seed,"pe_srtand:s"=>\$PE_strand,"qf:s"=>\$QFormat,
+GetOptions(\%opts,"prefix:s"=>\$Prefix,"seed:i"=>\$Seed,"pe_strand:s"=>\$PE_strand,"qf:s"=>\$QFormat,
 	"qth:i"=>\$Qth,"low:i"=>\$LowQ,"maxloq:i"=>\$MaxLoq,"diff:i"=>\$Diffbase,"help"=>\$Help);
 
 my $usage = qq(
@@ -136,6 +136,7 @@ sub check_fafq
 	open (IN,$file) if ($file!~/gz$/);
 	open (IN,"gzip -cd $file|") if ($file=~/gz$/);
 	$_=<IN>;
+	die "failed to read file: $file" if (!defined $_ || $_ eq "");
 	if ($_=~/^\>/)
 	{
 		$_=<IN>;

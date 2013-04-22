@@ -55,7 +55,8 @@ else
 
 my %cns;
 my @polymorphisms=();
-open (IN,$vcf) || die $!;
+open (IN,$vcf) if ($vcf=~/\.vcf$/);
+open (IN,"tabix $vcf $chr|") if ($vcf=~/\.vcf.gz$/);
 while(<IN>)
 {
 	next if (/^\#/ || /INDEL/);

@@ -3,10 +3,11 @@ use strict;
 use warnings;
 use Getopt::Long;
 
-my ($Edge,$Detail,$Len_p,$Len_t,$SubStr,$TrimMode,$APmode,$APdb,$Mismatch,$Prefix,$Verbose,$Help);
+my ($Edge,$Detail,$Len_p,$Len_t,$SubStr,$TrimMode,$Homopolymer,$APmode,$APdb,$Mismatch,$Prefix,$Verbose,$Help);
 my %opts;
 GetOptions(\%opts,"trim_detail:s"=>\$Detail,"edge:i"=>\$Edge,"len_p:s"=>\$Len_p,"len_t:i"=>\$Len_t,"mis:i"=>\$Mismatch,
-"sub:i"=>\$SubStr,"trim_mode:s"=>\$TrimMode,"ap_mode"=>\$APmode,"ap_db:s"=>\$APdb,"prefix:s"=>\$Prefix,"verbose"=>\$Verbose,"help"=>\$Help);
+"sub:i"=>\$SubStr,"trim_mode:s"=>\$TrimMode,"trim_polymer:s"=>\$Homopolymer,"ap_mode"=>\$APmode,"ap_db:s"=>\$APdb,"prefix:s"=>\$Prefix,
+"verbose"=>\$Verbose,"help"=>\$Help);
 my $usage = qq(
 trim_seq.pl -- trim fasta or fastq according to filter_adapter details
 Usage: perl $0 [option] <Input files>
@@ -16,6 +17,7 @@ Option: --trim_detail <file>		filter_adapter detail file, include: "reads_id   r
         --len_t <int>			set the minimal bases pair of the reads, default: 35
         --sub <int-int>			set reads substr: left_length-right_length
         --trim_mode <3|5|both>		trim 3\' or 5\' or both ends of reads, default: both
+        --trim_polymer <Type:Len>	trim homerpolymers, default: NULL (example: AT:6)
         --ap_mode			trim all adapters & primers by merged mapping sequences
         --ap_db				input AP file for strictly trimming
         --mis <int>			allow mismatch and gaps bases, default: 2
@@ -24,7 +26,7 @@ Option: --trim_detail <file>		filter_adapter detail file, include: "reads_id   r
         --help				help information
 Example: perl trim_fastq.pl *.fastq -trim_detail PE.adapter-primer.detail --edge 3 --trim_mode 3 --ap_mode
 Author : BENM <BinxiaoFeng\@gmail.com>
-Version: 0.2.0 beta
+Version: 0.2.1 beta
 Data: v1.0 Nov-10-2010
 Update: v1.1 Dec-27-2010
 Update: v1.2 Apr-28-2012
@@ -36,6 +38,7 @@ Update: v1.7 Nov-19-2012
 Update: v1.8 Nov-21-2012
 Update: v1.9 Dec-03-2012
 Update: v2.0 Dec-08-2012
+Update: v2.1 Apr-16-2013
 );
 
 die $usage if ((@ARGV==0)||($Help));
@@ -51,6 +54,9 @@ $Mismatch ||= 2;
 $TrimMode ||= "both";
 my ($Left,$Right) = (0,0);
 ($Left,$Right) = split /\-/,$SubStr if (defined $SubStr);
+
+my ($PolymerBase,$PolymerLen)=split /\:/,$Homopolymer if (defined $Homopolymer);
+die "--trim_polymer setting error: $Homopolymer, example: AT:10\n" if (defined $Homopolymer && ($PolymerBase!~/[ACGT]/ || $PolymerLen !~/\d+/));
 
 my ($totalAP,$totalAln,$totalMis,$totalGap)=(0,0,0,0);
 
@@ -181,7 +187,7 @@ foreach my $file(@ARGV)
 				s/\s+$//;
 				$qual=$_;
 			}
-			if (length($qual) != length($seq))
+			if (defined $qual && length($qual) != length($seq))
 			{
 				if (length($qual)>length($seq))
 				{
@@ -312,6 +318,7 @@ foreach my $file(@ARGV)
 						next;
 					}
 				}
+				trim_polymer(\$Name,\$seq,\$qual) if (defined $Homopolymer);
 				if ((length($seq)<${$Trim{$name}}[0]*$Len_p)||(length($seq)<$Len_t))
 				{
 					$Name .= " $db_title filtered";
@@ -328,7 +335,7 @@ foreach my $file(@ARGV)
 				else
 				{
 					if (defined $APdb){
-						strict_trim(\$Name,\$seq);
+						strict_trim(\$Name,\$seq,\$qual);
 					}
 					if (length($seq)>=$Len_t)
 					{
@@ -359,14 +366,11 @@ foreach my $file(@ARGV)
 			else
 			{
 				if (defined $APdb){
-					strict_trim(\$Name,\$seq);
+					strict_trim(\$Name,\$seq,\$qual);
 				}
-				if ($type==0)
+				if (defined $Homopolymer)
 				{
-					if (length($seq)<length($qual))
-					{
-						substr($qual,length($seq),length($qual)-length($seq),"");
-					}
+					trim_polymer(\$Name,\$seq,\$qual);
 				}
 				if (length($seq)<$Len_t)
 				{
@@ -400,19 +404,22 @@ foreach my $file(@ARGV)
 	close T;
 	close F;
 	print STDERR (get_time()," Output report...\n")  if (defined $Verbose);
-	open (OD,">$outprefix.filter-trim.stat") || die "Can't write to $file.filter-trim.stat.out\n";
-	print OD "Total matched AP length: $totalAln\n";
-	print OD "Total mismatch length between reads and AP: $totalMis\n";
-	print OD "Total gap length between reads and AP: $totalGap\n";
-	print OD ("Estimate error rate: ",int(1000000*($totalMis+$totalGap)/$totalAln+0.4999)/10000,"%\n");
-	print OD ("Contain AP sequences number: $totalAP\n");
-	print OD ("Expected trim reads number: $ExpetTrimReads\n");
-	print OD "5\' trimmed: $trim_left\n";
-	print OD "3\' trimmed: $trim_right\n";
-	print OD ("All trimmed: ",($trim_left+$trim_right),"\n");
-	print OD "Filtered: $filter\n";
-	print OD "No polluted: $unpolluted\n";
-	print STDERR (get_time()," Done!\n")  if (defined $Verbose);
+	if (defined $Detail)
+	{
+		open (OD,">$outprefix.filter-trim.stat") || die "Can't write to $file.filter-trim.stat.out\n";
+		print OD "Total matched AP length: $totalAln\n";
+		print OD "Total mismatch length between reads and AP: $totalMis\n";
+		print OD "Total gap length between reads and AP: $totalGap\n";
+		print OD ("Estimate error rate: ",int(1000000*($totalMis+$totalGap)/$totalAln+0.4999)/10000,"%\n");
+		print OD ("Contain AP sequences number: $totalAP\n");
+		print OD ("Expected trim reads number: $ExpetTrimReads\n");
+		print OD "5\' trimmed: $trim_left\n";
+		print OD "3\' trimmed: $trim_right\n";
+		print OD ("All trimmed: ",($trim_left+$trim_right),"\n");
+		print OD "Filtered: $filter\n";
+		print OD "No polluted: $unpolluted\n";
+		print STDERR (get_time()," Done!\n")  if (defined $Verbose);
+	}
 }
 
 sub overlap
@@ -438,7 +445,7 @@ sub get_time
 }
 
 sub strict_trim{
-	my ($name,$seq)=@_;
+	my ($name,$seq,$qual)=@_;
 	foreach my $seed(keys %APSeq) {
 		while($$seq=~/($seed)/g){
 			my $leftpart=$`;
@@ -459,6 +466,65 @@ sub strict_trim{
 					}
 				}
 			}
+		}
+	}
+	if (defined $$qual && $$qual ne "")
+	{
+		if (length($$seq)<length($$qual))
+		{
+			substr($$qual,length($$seq),length($$qual)-length($$seq),"");
+		}
+	}
+}
+
+sub trim_polymer
+{
+	my ($name,$seq,$qual)=@_;
+	my $polymerlen = $PolymerLen-1;
+	while ($$seq=~/([^N\-]{1})(\1{$polymerlen,})/g){
+		my ($element,$repeat,$rail,$pos)=($1,$2,$',$-[1]);
+		my $primary_element=$element;
+		while ($element=~/([ACGT]{1,}?)(\1{1,})/g)
+		{
+			$primary_element=$1;
+			if ($rail=~/^(($primary_element)+)/)
+			{
+				$repeat.=$1;
+			}
+		}
+		my $len=length("$element$repeat");
+		if ($PolymerBase=~/$primary_element/i && $len>=$PolymerLen)
+		{
+			if ($pos+$len>=length($$seq)||($pos==0&&$TrimMode ne "3"))
+			{
+				if ($pos==0)
+				{
+					$$name.=" $primary_element:$len:$pos-".($pos+$len-1);
+					substr($$seq,$pos,$len,"N"x($len));
+				}
+				else
+				{
+					$$name.=" $primary_element:$len:$pos-".($pos+$len-1);
+					substr($$seq,$pos,$len,"");
+					substr($$qual,$pos,$len,"") if (defined $$qual && $$qual ne "");
+				}
+			}
+			else
+			{
+				if ($TrimMode ne "3")
+				{
+					$$name.=" $primary_element:$len:$pos-".($pos+$len-1);
+					substr($$seq,$pos,$len,"N"x($len));
+				}
+			}
+		}
+	}
+	if ($TrimMode ne "3" && $$seq=~/^(N+)/)
+	{
+		$$seq=$';
+		if (defined $$qual && $$qual ne "")
+		{
+			substr($$qual,0,length($$qual)-length($$seq),"");
 		}
 	}
 }
