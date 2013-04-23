@@ -1,6 +1,0 @@
-pysam/namedtuple
-ctabix
-pysam/Pileup
-csamtools
-pysam/version
-pysam/__init__
