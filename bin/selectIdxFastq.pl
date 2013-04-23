@@ -3,11 +3,13 @@ use strict;
 use Getopt::Long;
 
 my %opts;
-my ($Reads1,$Reads2,$Index,$Prefix,$Help);
-GetOptions(%opts,"fastq1:s"=>\$Reads1,"fastq2:s"=>\$Reads2,"fastq:s"=>\$Reads1,"index:s"=>\$Index,"prefix:s"=>\$Prefix,"help"=>\$Help);
+my ($Reads1,$Reads2,$Index,$Qual,$Prefix,$Help);
+GetOptions(%opts,"fastq1:s"=>\$Reads1,"fastq2:s"=>\$Reads2,"fastq:s"=>\$Reads1,"index:s"=>\$Index,"qual:s"=>\$Qual,"prefix:s"=>\$Prefix,"help"=>\$Help);
 
-die "perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq -index idx1:idx2 [-prefix prefixName]" if (!defined $Reads1 || !defined $Index || defined $Help);
+die qq(perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq -index idx1:idx2 [-prefix prefixName] [-qual 30 or "?"]\n) if (!defined $Reads1 || !defined $Index || defined $Help);
 
+$Qual ||= 30;
+$Qual = ord($Qual)-33 unless ($Qual=~/^\d+/ && $Qual>=10);
 my ($Idx1,$Idx2)=split /\:/,$Index;
 my ($Out1,$Out2)=("","");
 if (defined $Prefix)
@@ -54,7 +56,9 @@ while(<IN1>)
 	$out1.=$_;
 	$_=<IN1>;
 	chomp;
+	my $qual1=substr($_,0,length($Idx1));
 	$out1.=($withIdx==1)?substr($_,length($Idx1),length($_)-length($Idx1))."\n":"$_\n";
+	my $qualcheck=check_qual($qual1);
 	if (defined $Reads2 && $Reads2 ne "")
 	{
 		$_=<IN2>;
@@ -77,17 +81,28 @@ while(<IN1>)
 		}
 		$_=<IN2>;
 		$out2.=$_;
+		my $qual2=substr($_,0,length($Idx2)) if (defined $Idx2);
+		$qualcheck=check_qual($qual2) if (defined $qual2 && $qual2 ne "");
 		$_=<IN2>;
 		chomp;
 		$out2.=($withIdx==1 && defined $Idx2 && $Idx2 ne "")?substr($_,length($Idx2),length($_)-length($Idx2))."\n":"$_\n";
-		print OUT2 $out2 if ($withIdx == 1);
+		print OUT2 $out2 if ($withIdx == 1 && $qualcheck==1);
 	}
-	print OUT1 $out1 if ($withIdx == 1);
+	print OUT1 $out1 if ($withIdx == 1 && $qualcheck==1);
 }
 close IN1;
 close IN2;
 close OUT1;
 close OUT2;
 
+sub check_qual{
+	my $qual=shift;
+	my @q=split //,$qual;
+	for (my $i=0;$i<@q;$i++)
+	{
+		return 0 if (ord($q[$i])-33<$Qual);
+	}
+	return 1;
+}
 
 __END__

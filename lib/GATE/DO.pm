@@ -2455,6 +2455,15 @@ sub runSOAP ($) {
 
 sub runSOAPdenovo ($) {
 	my $self=shift;
+	if (!exists $self->{"software:soapdenovo"})
+	{
+		return "";
+	}
+	my $soapdenovo=checkPath($self->{"software:soapdenovo"});
+	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"});
+	my $para=$self->{"CustomSetting:soapdenovo"};
+	
+	#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
 }
 
 sub runGenomeThreader ($) {

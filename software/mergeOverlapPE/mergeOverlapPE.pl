@@ -329,10 +329,12 @@ sub MaxQual
 	my $lowq2=0;
 	for (my $i=0;$i<@qual1;$i++)
 	{
-		$qq1+=ord($qual1[$i])-$qualth{$QFormat};
-		$lowq1++ if (ord($qual1[$i])-$qualth{$QFormat}<=$LowQ);
-		$qq2+=ord($qual2[$i])-$qualth{$QFormat};
-		$lowq2++ if (ord($qual2[$i])-$qualth{$QFormat}<=$LowQ);
+		my $qval1=ord($qual1[$i])-$qualth{$QFormat};
+		my $qval2=ord($qual2[$i])-$qualth{$QFormat};
+		$qq1+=$qval1;
+		$lowq1++ if ($qval1<=$LowQ);
+		$qq2+=$qval2;
+		$lowq2++ if ($qval2<=$LowQ);
 	}
 	if (@qual2==0)
 	{
