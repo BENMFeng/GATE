@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9e,04-16-2013";
+$VERSION = "0.9f,04-26-2013";
 package GATE::Element;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
@@ -140,6 +140,12 @@ sub parseDir($) {
 	$Workdir=~s/[\/\s\.]+$//;
 	$self->{'-workdir'}=$Workdir;
 }
+
+#########################################################
+#                                                       #
+#                    Data Processing                    #
+#                                                       #
+#########################################################
 
 sub selectIdxFastq ($) {
 	my $self = shift;
@@ -1007,6 +1013,16 @@ sub runRNASeqQC ($) {
 	return ($rnaseqqc_cmd);
 }
 
+sub runBEDtools ($) {
+	
+}
+
+#########################################################
+#                                                       #
+#                       Alignment                       #
+#                                                       #
+#########################################################
+
 sub runBWA($$) {
 	my $self=shift;
 	my $ref=shift;
@@ -1270,6 +1286,224 @@ sub runBWA($$) {
 		return "";
 	}
 }
+
+
+
+sub runbowtie($$) {
+	my ($self,$ref) = @_;
+	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"}) {
+		return "";
+	}
+	$ref ||= 'ref';
+	my $bowtie_cmd = qq(echo `date`; echo "run TopHat"\n);
+	$bowtie_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $bowtie=checkPath($self->{'software:bowtie'});
+	$bowtie_cmd.="export bowtie=$bowtie\n";
+	my $samtools = checkPath($self->{"software:samtools"});
+	$bowtie_cmd .= qq(export samtools="$samtools"\n);
+	my $reference=checkPath($self->{"database:$ref"});
+	$bowtie_cmd.="export reference=$reference\n";
+	my $bowtiepara=$self->{'CustomSetting:tophat'};
+	$bowtie_cmd.=qq(export tophatpara="$bowtiepara"\n);
+	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
+	$bowtie_version=$1 if ($bowtiepara=~/(bowtie[2]?)/);
+	if (defined $bowtie_version && $bowtie !~ /$bowtie_version$/)
+	{
+		$bowtie =~ s/[^\/]+$/$bowtie_version/;
+	}
+	my $bowtie_build="$bowtie-build";
+	$bowtie_cmd.="export bowtie_build=$bowtie_build\n";
+	$bowtie_cmd .= qq(export REFERENCE=$reference\n);
+	my $workdir=checkPath($self->{"-workdir"});
+	$bowtie_cmd.="export workdir=$workdir\n";
+	my $alndir=checkPath($self->{"CustomSetting:aln_outdir"});
+	$bowtie_cmd .= qq(export alndir="$alndir"\n);
+	$bowtie_cmd.=qq(cd \$workdir\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	$bowtie_cmd .= qq(mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
+	$bowtie_cmd .= "cd \${alndir}\n";
+	foreach my $lib(@libraries) {
+		$bowtie_cmd .= qq(echo `date`; echo "$lib"\n);
+		$bowtie_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$alndir/$lib));
+		$bowtie_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my @bam=();
+		if (exists $fq{1} && exists $fq{2}){
+			my @fq1=@{$fq{1}};
+			my @fq2=@{$fq{2}};
+			my $fq1=join ",",@fq1;
+			my $fq2=join ",",@fq2;
+		}
+		if (exists $fq{0} && @{$fq{0}}>0){
+			
+		}
+		if (@bam>1)
+		{
+			
+		}
+		else
+		{
+			
+		}
+	}
+	$bowtie_cmd .= "cd ..\n";
+	return ($bowtie_cmd);
+}
+
+sub runSOAP ($) {
+	
+}
+
+sub runTopHat($) {
+	my $self=shift;
+	my $ref=shift;
+	if (!exists $self->{"software:tophat"} || !-e $self->{"software:tophat"} || !defined $self->{"software:bowtie"}) {
+		return "";
+	}
+	$ref ||= 'ref';
+	my $tophat_cmd = qq(echo `date`; echo "run TopHat"\n);
+	$tophat_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $tophat=checkPath($self->{'software:tophat'});
+	$tophat_cmd.="export tophat=$tophat\n";
+	my $bowtie=checkPath($self->{'software:bowtie'});
+	$tophat_cmd.="export bowtie=$bowtie\n";
+	my $samtools = checkPath($self->{"software:samtools"});
+	$tophat_cmd .= qq(export samtools="$samtools"\n);
+	my $reference=checkPath($self->{"database:$ref"});
+	$tophat_cmd.="export reference=$reference\n";
+	#my $refGene=checkPath($self->{'database:refGene'});
+	#$tophat_cmd.="export refGene=$refGene\n";
+	my $tophatpara=$self->{'CustomSetting:tophat'};
+	$tophat_cmd.=qq(export tophatpara="$tophatpara"\n);
+	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
+	$bowtie_version=$1 if ($tophatpara=~/(bowtie[2]?)/);
+	if (defined $bowtie_version && $bowtie !~ /$bowtie_version$/)
+	{
+		$bowtie =~ s/[^\/]+$/$bowtie_version/;
+	}
+	my $bowtie_build="$bowtie-build";
+	$tophat_cmd.="export bowtie_build=$bowtie_build\n";
+	if ($bowtie=~/bowtie2/)
+	{
+		my $db_index=$1 if ($reference=~/(\S+)\.fa/i);
+		my $dbpath=$1 if ($reference=~/(\S+)\/[^\/\s]+$/);
+		$tophat_cmd .= "cd $dbpath\n";
+		#if ($db_index=~/\S+\/([^\/\s]+)$/)
+		#{
+		#	$tophat_cmd .= "ln -s \$reference $1\n" unless (-f $db_index);
+		#}
+		$tophat_cmd .= "\${bowtie_build} \$reference $db_index\n" unless (checkIndex('bowtie2',$db_index)==1);
+		$reference=$db_index;
+	}
+	$tophat_cmd .= qq(export REFERENCE=$reference\n);
+	my $workdir=checkPath($self->{"-workdir"});
+	$tophat_cmd.="export workdir=$workdir\n";
+	$tophat_cmd.=qq(cd \$workdir\n);
+	
+	my @libraries=sort keys %{$self->{'LIB'}};
+	$tophat_cmd .= "mkdir tophat\n" if (!-d qq($self->{"-workdir"}/tophat));
+	$tophat_cmd .= "cd tophat\n";
+	foreach my $lib(@libraries) {
+		$tophat_cmd .= qq(echo `date`; echo "$lib"\n);
+		#$tophat_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/tophat/$lib));
+		#$tophat_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my @bam=();
+		if (exists $fq{1} && exists $fq{2}){
+			my @fq1=@{$fq{1}};
+			my @fq2=@{$fq{2}};
+			my $fq1=join ",",@fq1;
+			my $fq2=join ",",@fq2;
+			my $ID=(exists $self->{$lib}{'fq1'}{0}{'ID'})?$self->{$lib}{'fq1'}{0}{'ID'}:$lib;
+			my $SM=(exists $self->{$lib}{'fq1'}{0}{'SM'})?$self->{$lib}{'fq1'}{0}{'SM'}:$lib;
+			my $LB=(exists $self->{$lib}{'fq1'}{0}{'LB'})?$self->{$lib}{'fq1'}{0}{'LB'}:$lib;
+			my $PL=(exists $self->{$lib}{'fq1'}{0}{'PL'})?$self->{$lib}{'fq1'}{0}{'PL'}:"ILLUMINA";
+			my $PU=$self->{$lib}{'fq1'}{0}{'PU'} if (exists $self->{$lib}{'fq1'}{0}{'PU'});
+			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
+			$rg.=" --rg-platform-unit $PU" if (defined $PU);
+			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_pe\_tophat \$REFERENCE $fq1 $fq2\n";
+			$tophat_cmd .= "\${samtools} index $lib\_pe\_tophat/accepted_hits.bam\n";
+			push @bam,$self->{'-workdir'}."/tophat/$lib\_pe\_tophat/accepted_hits.bam";
+		}
+		if (exists $fq{0} && @{$fq{0}}>0){
+			my @fq1=@{$fq{0}};
+			my $fq1=join ",",@fq1;
+			my $ID=(exists $self->{$lib}{'fq'}{0}{'ID'})?$self->{$lib}{'fq'}{0}{'ID'}:$lib;
+			my $SM=(exists $self->{$lib}{'fq'}{0}{'SM'})?$self->{$lib}{'fq'}{0}{'SM'}:$lib;
+			my $LB=(exists $self->{$lib}{'fq'}{0}{'LB'})?$self->{$lib}{'fq'}{0}{'LB'}:$lib;
+			my $PL=(exists $self->{$lib}{'fq'}{0}{'PL'})?$self->{$lib}{'fq'}{0}{'PL'}:"ILLUMINA";
+			my $PU=$self->{$lib}{'fq'}{0}{'PU'} if (exists $self->{$lib}{'fq'}{0}{'PU'});
+			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
+			$rg.=" --rg-platform-unit $PU" if (defined $PU);
+			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_se\_tophat \$REFERENCE $fq1\n";
+			$tophat_cmd .= "\${samtools} index $lib\_se\_tophat/accepted_hits.bam\n";
+			push @bam,$self->{'-workdir'}."/tophat/$lib\_se\_tophat/accepted_hits.bam";
+		}
+		push @bam, @{$self->{$lib}{"$ref-bwabam"}} if (exists $self->{$lib}{"$ref-bwabam"});
+		if (@bam>1)
+		{
+			if (exists $self->{"software:picard"}) {
+				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+				$MergeSamFiles=qq(java -Xmx4g -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
+				my $MergeSamFilesPara=$self->{"CustomSetting:MergeSamFiles"};
+				my $merge_bam=join " INPUT=",@bam;
+				$tophat_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.tophat.merge.bam\n";
+				$tophat_cmd .= "\${samtools} index $lib.merge.bam\n";
+				@{$self->{$lib}{"tophatbam"}}=();
+				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+				if (exists $self->{$lib}{"$ref-bwabam"})
+				{
+					@{$self->{$lib}{"$ref-bwabam"}}=();
+					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+				}
+			}
+			else {
+				my $merge_bam=join " ",@bam;
+				$tophat_cmd .= qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam\n);
+				foreach my $tophatbam(@bam)
+				{
+					$tophat_cmd .=  qq(\${samtools} view -H $tophatbam |grep RG >> $lib.inh.sam\n);
+				}
+				$tophat_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
+				$tophat_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.tophat.merge.bam $merge_bam\n";
+				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+				if (exists $self->{$lib}{"$ref-bwabam"})
+				{
+					@{$self->{$lib}{"$ref-bwabam"}}=();
+					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+				}
+			}
+		}
+		else
+		{
+			$self->{$lib}{"tophatbam"}=$bam[0];
+		}
+	}
+	$tophat_cmd .= "cd ..\n";
+	return ($tophat_cmd);
+}
+
+sub runBLAST ($) {
+	
+}
+
+sub runBLAT ($) {
+	
+}
+
+sub runLAST($) {
+	
+}
+
+sub runLASTZ($) {
+	
+}
+
+#########################################################
+#                                                       #
+#                      Genotyping                       #
+#                                                       #
+#########################################################
 
 sub callVar ($$) {
 	my $self=shift;
@@ -1673,196 +1907,11 @@ sub callVar ($$) {
 	return $callVar_cmd;
 }
 
-
-sub runbowtie($$) {
-	my ($self,$ref) = @_;
-	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"}) {
-		return "";
-	}
-	$ref ||= 'ref';
-	my $bowtie_cmd = qq(echo `date`; echo "run TopHat"\n);
-	$bowtie_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $bowtie=checkPath($self->{'software:bowtie'});
-	$bowtie_cmd.="export bowtie=$bowtie\n";
-	my $samtools = checkPath($self->{"software:samtools"});
-	$bowtie_cmd .= qq(export samtools="$samtools"\n);
-	my $reference=checkPath($self->{"database:$ref"});
-	$bowtie_cmd.="export reference=$reference\n";
-	my $bowtiepara=$self->{'CustomSetting:tophat'};
-	$bowtie_cmd.=qq(export tophatpara="$bowtiepara"\n);
-	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
-	$bowtie_version=$1 if ($bowtiepara=~/(bowtie[2]?)/);
-	if (defined $bowtie_version && $bowtie !~ /$bowtie_version$/)
-	{
-		$bowtie =~ s/[^\/]+$/$bowtie_version/;
-	}
-	my $bowtie_build="$bowtie-build";
-	$bowtie_cmd.="export bowtie_build=$bowtie_build\n";
-	$bowtie_cmd .= qq(export REFERENCE=$reference\n);
-	my $workdir=checkPath($self->{"-workdir"});
-	$bowtie_cmd.="export workdir=$workdir\n";
-	my $alndir=checkPath($self->{"CustomSetting:aln_outdir"});
-	$bowtie_cmd .= qq(export alndir="$alndir"\n);
-	$bowtie_cmd.=qq(cd \$workdir\n);
-	my @libraries=sort keys %{$self->{'LIB'}};
-	$bowtie_cmd .= qq(mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
-	$bowtie_cmd .= "cd \${alndir}\n";
-	foreach my $lib(@libraries) {
-		$bowtie_cmd .= qq(echo `date`; echo "$lib"\n);
-		$bowtie_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$alndir/$lib));
-		$bowtie_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
-		my @bam=();
-		if (exists $fq{1} && exists $fq{2}){
-			my @fq1=@{$fq{1}};
-			my @fq2=@{$fq{2}};
-			my $fq1=join ",",@fq1;
-			my $fq2=join ",",@fq2;
-		}
-		if (exists $fq{0} && @{$fq{0}}>0){
-			
-		}
-		if (@bam>1)
-		{
-			
-		}
-		else
-		{
-			
-		}
-	}
-	$bowtie_cmd .= "cd ..\n";
-	return ($bowtie_cmd);
-}
-
-sub runTopHat($) {
-	my $self=shift;
-	my $ref=shift;
-	if (!exists $self->{"software:tophat"} || !-e $self->{"software:tophat"} || !defined $self->{"software:bowtie"}) {
-		return "";
-	}
-	$ref ||= 'ref';
-	my $tophat_cmd = qq(echo `date`; echo "run TopHat"\n);
-	$tophat_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $tophat=checkPath($self->{'software:tophat'});
-	$tophat_cmd.="export tophat=$tophat\n";
-	my $bowtie=checkPath($self->{'software:bowtie'});
-	$tophat_cmd.="export bowtie=$bowtie\n";
-	my $samtools = checkPath($self->{"software:samtools"});
-	$tophat_cmd .= qq(export samtools="$samtools"\n);
-	my $reference=checkPath($self->{"database:$ref"});
-	$tophat_cmd.="export reference=$reference\n";
-	#my $refGene=checkPath($self->{'database:refGene'});
-	#$tophat_cmd.="export refGene=$refGene\n";
-	my $tophatpara=$self->{'CustomSetting:tophat'};
-	$tophat_cmd.=qq(export tophatpara="$tophatpara"\n);
-	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
-	$bowtie_version=$1 if ($tophatpara=~/(bowtie[2]?)/);
-	if (defined $bowtie_version && $bowtie !~ /$bowtie_version$/)
-	{
-		$bowtie =~ s/[^\/]+$/$bowtie_version/;
-	}
-	my $bowtie_build="$bowtie-build";
-	$tophat_cmd.="export bowtie_build=$bowtie_build\n";
-	if ($bowtie=~/bowtie2/)
-	{
-		my $db_index=$1 if ($reference=~/(\S+)\.fa/i);
-		my $dbpath=$1 if ($reference=~/(\S+)\/[^\/\s]+$/);
-		$tophat_cmd .= "cd $dbpath\n";
-		#if ($db_index=~/\S+\/([^\/\s]+)$/)
-		#{
-		#	$tophat_cmd .= "ln -s \$reference $1\n" unless (-f $db_index);
-		#}
-		$tophat_cmd .= "\${bowtie_build} \$reference $db_index\n" unless (checkIndex('bowtie2',$db_index)==1);
-		$reference=$db_index;
-	}
-	$tophat_cmd .= qq(export REFERENCE=$reference\n);
-	my $workdir=checkPath($self->{"-workdir"});
-	$tophat_cmd.="export workdir=$workdir\n";
-	$tophat_cmd.=qq(cd \$workdir\n);
-	
-	my @libraries=sort keys %{$self->{'LIB'}};
-	$tophat_cmd .= "mkdir tophat\n" if (!-d qq($self->{"-workdir"}/tophat));
-	$tophat_cmd .= "cd tophat\n";
-	foreach my $lib(@libraries) {
-		$tophat_cmd .= qq(echo `date`; echo "$lib"\n);
-		#$tophat_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/tophat/$lib));
-		#$tophat_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
-		my @bam=();
-		if (exists $fq{1} && exists $fq{2}){
-			my @fq1=@{$fq{1}};
-			my @fq2=@{$fq{2}};
-			my $fq1=join ",",@fq1;
-			my $fq2=join ",",@fq2;
-			my $ID=(exists $self->{$lib}{'fq1'}{0}{'ID'})?$self->{$lib}{'fq1'}{0}{'ID'}:$lib;
-			my $SM=(exists $self->{$lib}{'fq1'}{0}{'SM'})?$self->{$lib}{'fq1'}{0}{'SM'}:$lib;
-			my $LB=(exists $self->{$lib}{'fq1'}{0}{'LB'})?$self->{$lib}{'fq1'}{0}{'LB'}:$lib;
-			my $PL=(exists $self->{$lib}{'fq1'}{0}{'PL'})?$self->{$lib}{'fq1'}{0}{'PL'}:"ILLUMINA";
-			my $PU=$self->{$lib}{'fq1'}{0}{'PU'} if (exists $self->{$lib}{'fq1'}{0}{'PU'});
-			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
-			$rg.=" --rg-platform-unit $PU" if (defined $PU);
-			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_pe\_tophat \$REFERENCE $fq1 $fq2\n";
-			$tophat_cmd .= "\${samtools} index $lib\_pe\_tophat/accepted_hits.bam\n";
-			push @bam,$self->{'-workdir'}."/tophat/$lib\_pe\_tophat/accepted_hits.bam";
-		}
-		if (exists $fq{0} && @{$fq{0}}>0){
-			my @fq1=@{$fq{0}};
-			my $fq1=join ",",@fq1;
-			my $ID=(exists $self->{$lib}{'fq'}{0}{'ID'})?$self->{$lib}{'fq'}{0}{'ID'}:$lib;
-			my $SM=(exists $self->{$lib}{'fq'}{0}{'SM'})?$self->{$lib}{'fq'}{0}{'SM'}:$lib;
-			my $LB=(exists $self->{$lib}{'fq'}{0}{'LB'})?$self->{$lib}{'fq'}{0}{'LB'}:$lib;
-			my $PL=(exists $self->{$lib}{'fq'}{0}{'PL'})?$self->{$lib}{'fq'}{0}{'PL'}:"ILLUMINA";
-			my $PU=$self->{$lib}{'fq'}{0}{'PU'} if (exists $self->{$lib}{'fq'}{0}{'PU'});
-			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
-			$rg.=" --rg-platform-unit $PU" if (defined $PU);
-			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_se\_tophat \$REFERENCE $fq1\n";
-			$tophat_cmd .= "\${samtools} index $lib\_se\_tophat/accepted_hits.bam\n";
-			push @bam,$self->{'-workdir'}."/tophat/$lib\_se\_tophat/accepted_hits.bam";
-		}
-		push @bam, @{$self->{$lib}{"$ref-bwabam"}} if (exists $self->{$lib}{"$ref-bwabam"});
-		if (@bam>1)
-		{
-			if (exists $self->{"software:picard"}) {
-				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
-				$MergeSamFiles=qq(java -Xmx4g -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
-				my $MergeSamFilesPara=$self->{"CustomSetting:MergeSamFiles"};
-				my $merge_bam=join " INPUT=",@bam;
-				$tophat_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.tophat.merge.bam\n";
-				$tophat_cmd .= "\${samtools} index $lib.merge.bam\n";
-				@{$self->{$lib}{"tophatbam"}}=();
-				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
-				if (exists $self->{$lib}{"$ref-bwabam"})
-				{
-					@{$self->{$lib}{"$ref-bwabam"}}=();
-					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
-				}
-			}
-			else {
-				my $merge_bam=join " ",@bam;
-				$tophat_cmd .= qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam\n);
-				foreach my $tophatbam(@bam)
-				{
-					$tophat_cmd .=  qq(\${samtools} view -H $tophatbam |grep RG >> $lib.inh.sam\n);
-				}
-				$tophat_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
-				$tophat_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.tophat.merge.bam $merge_bam\n";
-				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
-				if (exists $self->{$lib}{"$ref-bwabam"})
-				{
-					@{$self->{$lib}{"$ref-bwabam"}}=();
-					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
-				}
-			}
-		}
-		else
-		{
-			$self->{$lib}{"tophatbam"}=$bam[0];
-		}
-	}
-	$tophat_cmd .= "cd ..\n";
-	return ($tophat_cmd);
-}
+#########################################################
+#                                                       #
+#                       Assembly                        #
+#                                                       #
+#########################################################
 
 sub runCufflinks($) {
 	my ($self,%attrs)=@_;
@@ -2053,6 +2102,167 @@ sub runCuffCompare($) {
 	return ($cuffcompare_cmd);
 }
 
+
+#Trinity.pl --seqType fq --JM 100G --left reads_1.fq  --right reads_2.fq --CPU 6
+#TRINITY_RNASEQ_ROOT/util/alignReads.pl --left left.fq --right right.fq --seqType fq --target Trinity.fasta --aligner bowtie
+#TRINITY_RNASEQ_ROOT/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out.nameSorted.sam.+.sam.PropMapPairsForRSEM.bam --paired
+sub runTrinity($) {
+	my $self=shift;
+	my $trinity=checkPath($self->{"software:trinity"});
+	my $trinity_cmd = qq(echo `date`; echo "run Trinity"\n);
+	$trinity_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	if (exists $self->{'CustomSetting:TRINITY_RNASEQ_ROOT'}) {
+		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$self->{'CustomSetting:TRINITY_RNASEQ_ROOT'}"\n);
+	} else {
+		my $trinity_root=$1 if ($trinity=~/(\S+)\/[^\/]$/);
+		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$trinity_root"\n);
+	}
+	my $para=(exists $self->{"CustomSetting:trinity"})?$self->{"CustomSetting:trinity"}:qq(--seqType fq --JM 100G --CPU $self->{"CustomSetting:multithreads"});
+	$trinity_cmd .= qq(cd $self->{"-workdir"}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		$trinity_cmd .= qq(echo `date`; echo "$lib"\n);
+		$trinity_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
+		$trinity_cmd .= qq(cd $lib\n);
+		$trinity_cmd .= qq(mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
+		$trinity_cmd .= qq(cd trinity_asm\n);
+		my %read=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $read{1} && exists $read{2}) {
+			if (@{$read{1}}>1 && @{$read{2}}>1){
+				my ($reads1,$reads2);
+				if (@{$read{1}}==@{$read{2}}) {
+					$reads1=join " ",@{$read{1}};
+					$reads2=join " ",@{$read{2}};
+				} else {
+					if (@{$read{1}}<@{$read{2}}) {
+						$reads1=join " ",@{$read{1}}[0..(@{$read{1}}-1)];
+						$reads2=join " ",@{$read{2}}[0..(@{$read{1}}-1)];
+						push @{$read{0}},@{$read{1}}[@{$read{1}}..(@{$read{2}}-1)];
+					} else {
+						$reads1=join " ",@{$read{1}}[0..(@{$read{2}}-1)];
+						$reads2=join " ",@{$read{2}}[0..(@{$read{2}}-1)];
+						push @{$read{0}},@{$read{2}}[@{$read{2}}..(@{$read{1}}-1)];
+					}
+				}
+				if (defined $reads1 && defined $reads2)
+				{
+					$trinity_cmd .= qq(cat $reads1 > reads_1.fq && cat $reads2 > reads_2.fq\n);
+					$trinity_cmd .= qq($trinity --left reads_1.fq --right reads_2.fq $para\n);
+					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie\n);
+					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --paired\n);
+				}
+			} else {
+				$trinity_cmd .= qq($trinity --left ${$read{1}}[0] --right ${$read{2}}[0] $para\n);
+				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie\n);
+				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --paired\n);
+			}
+		} elsif (exists $read{1}) {
+			$trinity_cmd .= qq($trinity --single ${$read{1}}[0] $para\n);
+			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{1}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
+			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --SS_lib_type F --thread_count 8\n);
+		} elsif (exists $read{2}) {
+			$trinity_cmd .= qq($trinity --single ${$read{1}}[2] $para\n);
+			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{2}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
+			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam--SS_lib_type F --thread_count 8\n);
+		}
+		if (exists $read{0}) {
+			$trinity_cmd .= qq($trinity --single ${$read{0}}[0] $para\n);
+			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{0}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
+			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --SS_lib_type F --thread_count 8\n);
+		}
+	}
+	return $trinity_cmd;
+}
+
+sub runVelvet ($) {
+	my $self=shift;
+	my $velveth=checkPath($self->{"software:velveth"});
+	my $velvet_cmd = qq(echo `date`; echo "run Velvet"\n);
+	$velvet_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$velvet_cmd .= qq(export velvet="$velveth"\n);
+	my $velvetg="";
+	if (exists $self->{"software:velvetg"})
+	{
+		$velvetg=checkPath($self->{"software:velvetg"});
+		$velvet_cmd .= qq(export velveg="$velvetg"\n);
+	}
+	else
+	{
+		$velvetg=$self->{"software:velveth"};
+		$velvetg=~s/velveth$/velvetg/;
+		$velvet_cmd .= qq(export velveg="$velvetg"\n);
+	}
+	my $velvetgpara = $self->{'CustomSetting:velvetg'};
+	$velvet_cmd .= qq(export velvegpara="$velvetgpara"\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
+	$velvet_cmd .= qq(mkdir velvet\n);
+	foreach my $lib(@libraries) {
+		$velvet_cmd .= qq(echo `date`; echo "$lib"\n);
+		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
+		$velvet_cmd .= qq(cd $lib\n);
+		my %read=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $read{1} && exists $read{2}) {
+			if (@{$read{1}}>1 && @{$read{2}}>1){
+				
+			} else {
+				
+			}
+		} elsif (exists $read{1}) {
+
+		} elsif (exists $read{2}) {
+			
+		}
+		if (exists $read{0}) {
+			
+		}
+	}
+}
+
+sub runOases ($) {
+	my $self=shift;
+	my $oases=checkPath($self->{"software:oascs"});
+	my $oases_cmd = "";
+	$oases_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$oases_cmd .= qq(export oascs="$oases"\n);
+
+}
+
+sub runABySS ($) {
+	my $self=shift;
+}
+
+sub runTransABySS ($) {
+	my $self=shift;
+}
+
+sub runSOAPdenovo ($) {
+	my $self=shift;
+	if (!exists $self->{"software:soapdenovo"})
+	{
+		return "";
+	}
+	my $soapdenovo=checkPath($self->{"software:soapdenovo"});
+	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"});
+	my $para=$self->{"CustomSetting:soapdenovo"};
+	
+	#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
+}
+
+sub runPhrap ($) {
+	
+}
+
+sub runMSR_CA($) {
+	
+}
+
+#########################################################
+#                                                       #
+#              Quantitative analysis                    #
+#                                                       #
+#########################################################
+
 sub runCuffdiff($) {
 	my $self=shift;
 	my $ref = shift;
@@ -2098,29 +2308,16 @@ sub runCuffdiff($) {
 	return ($cuffdiff_cmd);
 }
 
-sub runBLAST ($) {
-	
-}
-
-sub runBLAT ($) {
-	
-}
-
-sub runLAST($) {
-	
-}
-
-sub runLASTZ($) {
-	
-}
-
 sub runcummeRbund ($) {
 	my $self = shift;
 }
 
-sub runTophatFusion ($) {
-	my $self = shift;
-}
+
+#########################################################
+#                                                       #
+#              Alternative Splicing                     #
+#                                                       #
+#########################################################
 
 sub runAlternativeSplicing($) {
 	my $self = shift;
@@ -2288,6 +2485,26 @@ sub runScripture ($) {
 	
 }
 
+#########################################################
+#                                                       #
+#                    Gene Fusion                        #
+#                                                       #
+#########################################################
+
+sub runTophatFusion ($) {
+	my $self = shift;
+}
+
+sub runSOAPfusion ($) {
+	my $self = shift;
+}
+
+#########################################################
+#                                                       #
+#               ChiP-seq/MeDIP-seq                      #
+#                                                       #
+#########################################################
+
 sub runMACS ($) {
 	#macs14 -t $Indir/$1/$1.bowtie2.sam -c $Indir/$2/$2.bowtie2.sam --bw 180 --gsize mm --verbose 3 --diag  -B -S --nomodel --name $1vs$2 --mfold 10,30 2>macs.log
 	my $self=shift;
@@ -2308,163 +2525,15 @@ sub runMACS ($) {
 
 }
 
-sub runBEDtools ($) {
-	
-}
-
 sub runCisGenome ($) {
 	
 }
 
-#Trinity.pl --seqType fq --JM 100G --left reads_1.fq  --right reads_2.fq --CPU 6
-#TRINITY_RNASEQ_ROOT/util/alignReads.pl --left left.fq --right right.fq --seqType fq --target Trinity.fasta --aligner bowtie
-#TRINITY_RNASEQ_ROOT/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out.nameSorted.sam.+.sam.PropMapPairsForRSEM.bam --paired
-sub runTrinity($) {
-	my $self=shift;
-	my $trinity=checkPath($self->{"software:trinity"});
-	my $trinity_cmd = qq(echo `date`; echo "run Trinity"\n);
-	$trinity_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	if (exists $self->{'CustomSetting:TRINITY_RNASEQ_ROOT'}) {
-		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$self->{'CustomSetting:TRINITY_RNASEQ_ROOT'}"\n);
-	} else {
-		my $trinity_root=$1 if ($trinity=~/(\S+)\/[^\/]$/);
-		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$trinity_root"\n);
-	}
-	my $para=(exists $self->{"CustomSetting:trinity"})?$self->{"CustomSetting:trinity"}:qq(--seqType fq --JM 100G --CPU $self->{"CustomSetting:multithreads"});
-	$trinity_cmd .= qq(cd $self->{"-workdir"}\n);
-	my @libraries=sort keys %{$self->{'LIB'}};
-	foreach my $lib(@libraries) {
-		$trinity_cmd .= qq(echo `date`; echo "$lib"\n);
-		$trinity_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
-		$trinity_cmd .= qq(cd $lib\n);
-		$trinity_cmd .= qq(mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
-		$trinity_cmd .= qq(cd trinity_asm\n);
-		my %read=getlibSeq($self->{"LIB"}{$lib});
-		if (exists $read{1} && exists $read{2}) {
-			if (@{$read{1}}>1 && @{$read{2}}>1){
-				my ($reads1,$reads2);
-				if (@{$read{1}}==@{$read{2}}) {
-					$reads1=join " ",@{$read{1}};
-					$reads2=join " ",@{$read{2}};
-				} else {
-					if (@{$read{1}}<@{$read{2}}) {
-						$reads1=join " ",@{$read{1}}[0..(@{$read{1}}-1)];
-						$reads2=join " ",@{$read{2}}[0..(@{$read{1}}-1)];
-						push @{$read{0}},@{$read{1}}[@{$read{1}}..(@{$read{2}}-1)];
-					} else {
-						$reads1=join " ",@{$read{1}}[0..(@{$read{2}}-1)];
-						$reads2=join " ",@{$read{2}}[0..(@{$read{2}}-1)];
-						push @{$read{0}},@{$read{2}}[@{$read{2}}..(@{$read{1}}-1)];
-					}
-				}
-				if (defined $reads1 && defined $reads2)
-				{
-					$trinity_cmd .= qq(cat $reads1 > reads_1.fq && cat $reads2 > reads_2.fq\n);
-					$trinity_cmd .= qq($trinity --left reads_1.fq --right reads_2.fq $para\n);
-					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie\n);
-					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --paired\n);
-				}
-			} else {
-				$trinity_cmd .= qq($trinity --left ${$read{1}}[0] --right ${$read{2}}[0] $para\n);
-				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie\n);
-				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --paired\n);
-			}
-		} elsif (exists $read{1}) {
-			$trinity_cmd .= qq($trinity --single ${$read{1}}[0] $para\n);
-			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{1}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
-			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --SS_lib_type F --thread_count 8\n);
-		} elsif (exists $read{2}) {
-			$trinity_cmd .= qq($trinity --single ${$read{1}}[2] $para\n);
-			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{2}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
-			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam--SS_lib_type F --thread_count 8\n);
-		}
-		if (exists $read{0}) {
-			$trinity_cmd .= qq($trinity --single ${$read{0}}[0] $para\n);
-			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{0}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
-			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --SS_lib_type F --thread_count 8\n);
-		}
-	}
-	return $trinity_cmd;
-}
-
-sub runVelvet ($) {
-	my $self=shift;
-	my $velveth=checkPath($self->{"software:velveth"});
-	my $velvet_cmd = qq(echo `date`; echo "run Velvet"\n);;
-	$velvet_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$velvet_cmd .= qq(export velvet="$velveth"\n);
-	my $velvetg="";
-	if (exists $self->{"software:velvetg"})
-	{
-		$velvetg=checkPath($self->{"software:velvetg"});
-		$velvet_cmd .= qq(export velveg="$velvetg"\n);
-	}
-	else
-	{
-		$velvetg=$self->{"software:velveth"};
-		$velvetg=~s/velveth$/velvetg/;
-		$velvet_cmd .= qq(export velveg="$velvetg"\n);
-	}
-	my $velvetgpara = $self->{'CustomSetting:velvetg'};
-	$velvet_cmd .= qq(export velvegpara="$velvetgpara"\n);
-	my @libraries=sort keys %{$self->{'LIB'}};
-	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
-	$velvet_cmd .= qq(mkdir velvet\n);
-	foreach my $lib(@libraries) {
-		$velvet_cmd .= qq(echo `date`; echo "$lib"\n);
-		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
-		$velvet_cmd .= qq(cd $lib\n);
-		my %read=getlibSeq($self->{"LIB"}{$lib});
-		if (exists $read{1} && exists $read{2}) {
-			if (@{$read{1}}>1 && @{$read{2}}>1){
-				
-			} else {
-				
-			}
-		} elsif (exists $read{1}) {
-
-		} elsif (exists $read{2}) {
-			
-		}
-		if (exists $read{0}) {
-			
-		}
-	}
-}
-
-sub runOases ($) {
-	my $self=shift;
-	my $oases=checkPath($self->{"software:oascs"});
-	my $oases_cmd = "";
-	$oases_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$oases_cmd .= qq(export oascs="$oases"\n);
-
-}
-
-sub runABySS ($) {
-	my $self=shift;
-}
-
-sub runTransABySS ($) {
-	my $self=shift;
-}
-
-sub runSOAP ($) {
-	
-}
-
-sub runSOAPdenovo ($) {
-	my $self=shift;
-	if (!exists $self->{"software:soapdenovo"})
-	{
-		return "";
-	}
-	my $soapdenovo=checkPath($self->{"software:soapdenovo"});
-	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"});
-	my $para=$self->{"CustomSetting:soapdenovo"};
-	
-	#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
-}
+#########################################################
+#                                                       #
+#           Gene Prediction/Annotation                  #
+#                                                       #
+#########################################################
 
 sub runGenomeThreader ($) {
 	my $self=shift;
@@ -2473,7 +2542,7 @@ sub runGenomeThreader ($) {
 		return "";
 	}
 	my $gth=checkPath($self->{"software:gth"});
-	my $gth_cmd = "";
+	my $gth_cmd = qq(echo `date`; echo "run GenomeThreader"\n);
 	$gth_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$gth_cmd .= qq(export gth="$gth"\n);
 	my $genomic=$self->{"database:denovo"};
@@ -2482,17 +2551,21 @@ sub runGenomeThreader ($) {
 	my $protein=$self->{"database:protein"} if (exists $self->{"database:protein"});
 	$gth_cmd .= qq(export protein="$protein"\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
+	$gth_cmd .= qq(cd $self->{"-workdir"}\n);
 	$gth_cmd .= qq(mkdir gth\n) unless (-d qq($self->{"-workdir"}/gth));
 	foreach my $lib(@libraries) {
 		$gth_cmd .= qq(echo `date`; echo "$lib"\n);
 		$gth_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
 		$gth_cmd .= qq(cd $lib\n);
-		my $genomic ;
+		my $genomic;
 		if (exists $self->{"LIB"}{$lib}{'INPUT'}{'denovo'}) {
 			$genomic = $self->{"LIB"}{$lib}{'INPUT'}{'denovo'};
 		}
 		elsif (exists $self->{"LIB"}{"$lib"}{'denovo'}) {
 			$genomic = ${$self->{"LIB"}{$lib}{'denovo'}}[0];
+		}
+		elsif (exists $self->{"LIB"}{"$lib"}{'fa'}) {
+			$genomic = ${$self->{"LIB"}{$lib}{'fa'}}[0];
 		}
 		$gth_cmd .= qq(cd $self->{"-workdir"}\n);
 		$gth_cmd .= qq(cd gth\n);
@@ -2546,6 +2619,73 @@ sub runTRF ($) {
 sub runCirCOS ($) {
 	
 }
+
+sub runClustalW2($) {
+	my $self=shift;
+	my $clustalw2=(-f "/usr/local/bin/clustalw2" && -e "/usr/local/bin/clustalw2") ? "/usr/local/bin/clustalw2" : checkPath($self->{"software:clustalw2"});
+	if (!defined $clustalw2)
+	{
+		return "";
+	}
+#clustalw2 -INFILE=chloroplast.ext -ALIGN -TREE -PIM -TYPE=DNA -OUTPUT=NEXUS -STATS=chloroplast_stats.log > chloroplast.log 2>&1 &
+	my $clustalw2_cmd=qq(echo `date`; echo "run ClustalW2"\n);;
+	$clustalw2_cmd.= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$clustalw2_cmd.=qq(export clustalw2=$clustalw2\n);
+	my $para=(exists $self->{"CustomSetting:clustalw2"})?$self->{"CustomSetting:clustalw2"}:"-ALIGN -TREE -PIM -TYPE=DNA -OUTPUT=NEXUS -STATS=stats.log";
+	$clustalw2_cmd.=qq(export clustalw2_para=$para\n);
+	my $phylogen_outdir = (exists $self->{"CustomSetting:phylogen_outdir"}) ? $self->{"CustomSetting:phylogen_outdir"} : "phylogen";
+	my $workdir=checkPath($self->{"-workdir"});
+	$clustalw2_cmd.=qq(export workdir=$workdir\n);
+	$clustalw2_cmd.=qq(export phylgen_outdir=$phylogen_outdir\n);
+	$clustalw2_cmd.=qq(cd \${wordir}\n);
+	$clustalw2_cmd.=qq(mkdir \${phylgen_outdir}\n) if (!-d qq($self->{"-workdir"}/$phylogen_outdir));
+	$clustalw2_cmd.=qq(cd \${phylgen_outdir}\n);
+	if (exists $self->{clustalw2_INFILE})
+	{
+		my $infile=checkPath($self->{clustalw2_INFILE});
+		$clustalw2_cmd.=qq(\${clustalw2} \${clustalw2_para} -INFILE=$infile\n);
+		my $prefix=$1 if ($infile=~/([^\/\s]\S+)\.[^\.\s]+$/);
+		$self->{"NEXUS"}="$workdir/$phylogen_outdir/$prefix.nxs";
+	}
+	else
+	{
+		my @libraries=sort keys %{$self->{'LIB'}};
+		foreach my $lib(@libraries) {
+			$clustalw2_cmd.="mkdir $lib\n";
+			$clustalw2_cmd.="cd $lib\n";
+			my @file=();
+			push @file,@{$self->{"LIB"}{$lib}{'fa'}} if (exists $self->{"LIB"}{$lib}{'fa'});
+			push @file,@{$self->{"LIB"}{$lib}{'fasta'}} if (exists $self->{"LIB"}{$lib}{'fasta'});
+			push @file,@{$self->{"LIB"}{$lib}{'INFILE'}} if (exists $self->{"LIB"}{$lib}{'INFILE'});
+			if (@file>0) {
+				for (my $i=0;$i<@file;$i++)
+				{
+					$clustalw2_cmd.="\${clustalw2} \${clustalw2_para} -INFILE=$file[$i]\n";
+					my $prefix=$1 if ($file[$i]=~/([^\/\s]\S+)\.[^\.\s]+$/);
+					push @{$self->{$lib}{"NEXUS"}},"$workdir/$phylogen_outdir/$prefix.nxs";
+				}
+			}
+			$clustalw2_cmd.="cd ..\n";
+		}
+	}
+	$clustalw2_cmd.="cd ..\n";
+	return $clustalw2_cmd;
+}
+
+sub runMrBayes
+{
+	my $self=shift;
+#begin mrbayes;      
+#
+#exec example.nex;
+#lset nst=6 rates=invgamma;
+#mcmc ngen=20000000;
+#sump relburnin=yes burninfrac=0.25;
+#sumt relburnin=yes burninfrac=0.25;
+#end;
+
+}
+
 
 sub getlibSeq ($) {
 	my $lib=shift;

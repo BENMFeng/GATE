@@ -54,7 +54,7 @@ The algorithm is that:
 =head1 Version
 
   Author: BENM, binxiaofeng@gmail.com
-  Version: 4.1.6,  Date: 2008-2-25 UpDate: 2012-12-24
+  Version: 4.1.7,  Date: 2008-2-25 UpDate: 2013-04-16
 
 =head1 Usage
 
@@ -899,8 +899,8 @@ sub filterout_overlap
 sub extract_overlap
 {
 	my $block_p=shift;
-	my $limitedSize = 1;
-	my $limitedDepth = 2;
+	my $limitedSize ||= 1;
+	my $limitedDepth ||= 2;
 	if (defined $rd1)
 	{
 		if ($Extract eq "N")
@@ -917,7 +917,7 @@ sub extract_overlap
 			{
 				print "ID\tStart\tEnd\tSize\tCoveredRegionsNum\tCoveredRegions(Start,End,Length)...\n";
 			}
-			if ($OverlapLimited=~/(\d+)\-bp\:(\d+)\-covdepth/)
+			if ($OverlapLimited=~/([^\:\-\s]+)\-bp\:([^\:\-\s]+)\-covdepth/)
 			{
 				($limitedSize,$limitedDepth)=($1,$2);
 			}
@@ -988,7 +988,7 @@ sub extract_overlap
 				my ($S1,$E1,$regionID1)=@{$array_order[$i]};
 				$S=$S1;
 				$E=$E1;
-				if ($limitedDepth==1)
+				if ($limitedDepth<=1)
 				{
 					if (defined $regionID1)
 					{
@@ -1023,15 +1023,18 @@ sub extract_overlap
 					if (($S2>=$S)&&($S2<=$E))
 					{
 						$E=($E2>$E)?$E2:$E;
+						#print STDERR "$S\t$E\t$S1\t$E1\t$S2\t$E2\n";
 						if ((defined $regionID1)&&(defined $regionID2))
 						{
 							push @region,[$S1,$E1,$regionID1] if (@region==0);
 							push @region,[$S2,$E2,$regionID2];
+							$fst_begin=$j+1;
 						}
 						else
 						{
 							push @region,[$S1,$E1] if (@region==0);
 							push @region,[$S2,$E2];
+							$fst_begin=$j+1;
 						}
 					}
 				}
@@ -1084,10 +1087,10 @@ sub call_coverdetph
 			if ($pos ne "" && $pos=~/\d+/)
 			{
 				map{$covregion{$_}=1;}keys %{$depth{$k}};
-				if ($k-$pos>=$limitedSize)
+				if ($k-$pos+1>=$limitedSize)
 				{
 					my $num=scalar(keys %covregion);
-					print ("$table_id\t$pos\t",$k-1,"\t",$k-$pos,"\t$num");
+					print ("$table_id\t$pos\t",$k,"\t",$k-$pos+1,"\t$num");
 					my @covregion=sort{$a<=>$b}keys %covregion;
 					my $out="";
 					for (my $i=0;$i<@covregion;$i++)

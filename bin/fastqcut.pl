@@ -21,7 +21,7 @@ Usage: perl $0 [option] <Input files|pipein>
         --sd <float>			set quality variance S.D.(STDEV), default: 5
         --trim				trim edge low qualtiy bases, recommand for retrieving high quality sequence
         --prefix <str>			set output filter/discard reads prefix name, if null it won't generate *.qcut.out file
-        --out <file>			output high quality sequences aftwer fastqcut, if null it will be STDOUT
+        --out <file>			output high quality sequences after fastqcut, if null it will be STDOUT
         --help				help information
 Example: perl solexa-qc.pl seq1.fastq -f L -n 5 -len 35 -sd 0.2 -trim -prefix seq1
 Author : BENM <BinxiaoFeng\@gmail.com>

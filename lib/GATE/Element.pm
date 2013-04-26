@@ -98,5 +98,14 @@ sub denovo($) {
 	$self->runTrinity();
 }
 
+sub predict($) {
+	my $self=shift;
+}
+
+#sub phylgen($) {
+#	my $self=shift;
+#	$self->runClustalW2().$self->runMrBayes();
+#}
+
 
 1;
