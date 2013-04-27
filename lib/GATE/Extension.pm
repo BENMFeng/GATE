@@ -125,6 +125,11 @@ sub check_format ($) {
 	}
 }
 
+sub check_version ($)
+{
+	my $selft=shift;
+}
+
 sub plottingLociVsCoverage ($)
 {
 	my ($infile,$outfile,$title);

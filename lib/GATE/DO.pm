@@ -1013,6 +1013,14 @@ sub runRNASeqQC ($) {
 	return ($rnaseqqc_cmd);
 }
 
+sub runSEECR($) {
+	
+}
+
+sub runCRAC($) {
+	
+}
+
 sub runBEDtools ($) {
 	
 }
@@ -1039,12 +1047,14 @@ sub runBWA($$) {
 	$bwa_cmd .= qq(export samtools="$samtools"\n);
 	my $reference=checkPath($self->{"database:$ref"});
 	$bwa_cmd .= qq(export REFERENCE="$reference"\n);
-	my $alnpara=$self->{'CustomSetting:bwaaln'};
+	my $alnpara=$self->{'CustomSetting:bwaaln'} if (exists $self->{'CustomSetting:bwaaln'});
+	my $mempara=$self->{'CustomSetting:bwamem'} if (exists $self->{'CustomSetting:bwamem'});
 	if ($alnpara!~/\-t\s+\d+/ && exists $self->{'CustomSetting:multithreads'})
 	{
 		$alnpara.=" -t ".$self->{'CustomSetting:multithreads'};
 	}
-	$bwa_cmd .= qq(export alnpara="$alnpara"\n);
+	$bwa_cmd .= qq(export alnpara="$alnpara"\n) if (defined $alnpara);
+	$bwa_cmd .= qq(export mempara="$mempara"\n) if (defined $mempara);
 	my $sampepara="";
 	$sampepara=$self->{'CustomSetting:sampe'} if (exists $self->{'CustomSetting:sampe'});
 	my $samsepara="";
@@ -1083,60 +1093,98 @@ sub runBWA($$) {
 		my %fq=getlibSeq($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
 			for (my $j=0;$j<@{$fq{2}};$j++) {
-				my $sai1=(split /\//,${$fq{1}}[$j])[-1];
-				my $sai2=(split /\//,${$fq{2}}[$j])[-1];
-				$sai1=~s/\.gz//i;
-				$sai1=~s/\.fq//i;
-				$sai1=~s/\.fastq//i;
-				$sai2=~s/\.gz//i;
-				$sai2=~s/\.fq//i;
-				$sai2=~s/\.fastq//i;
-				$sai1.=".sai";
-				$sai2.=".sai";
-				$bwa_cmd .= ("\${bwa} aln \${alnpara} \$REFERENCE ${$fq{1}}[$j] > $sai1\n");
-				$bwa_cmd .= ("\${bwa} aln \${alnpara} \$REFERENCE ${$fq{2}}[$j] > $sai2\n");
 				my $bam="";
-				if (@{$fq{2}}>1) {
-					my $k=$j+1;
-					my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
-					my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
-					my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
-					my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
-					my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
-					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-					foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
-					{
-						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+				if (defined $alnpara) {
+					my $sai1=(split /\//,${$fq{1}}[$j])[-1];
+					my $sai2=(split /\//,${$fq{2}}[$j])[-1];
+					$sai1=~s/\.gz//i;
+					$sai1=~s/\.fq//i;
+					$sai1=~s/\.fastq//i;
+					$sai2=~s/\.gz//i;
+					$sai2=~s/\.fq//i;
+					$sai2=~s/\.fastq//i;
+					$sai1.=".sai";
+					$sai2.=".sai";
+					$bwa_cmd .= ("\${bwa} aln \${alnpara} \$REFERENCE ${$fq{1}}[$j] > $sai1\n");
+					$bwa_cmd .= ("\${bwa} aln \${alnpara} \$REFERENCE ${$fq{2}}[$j] > $sai2\n");
+					if (@{$fq{2}}>1) {
+						my $k=$j+1;
+						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
+						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+						my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
 						{
-							$rg=~s/\'$//;
-							$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							}
+						}
+						$bwa_cmd .= qq(\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.$k.bam\n);
+						$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.rmdup.bam $lib.pair.$k.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.$k.rmdup.sort.bam\n";
+						$bam="$lib.pair.$k.rmdup.sort.bam";
+					} else {
+						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
+						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+						my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							}
+						}
+						$bwa_cmd .= "\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.rmdup.bam $lib.pair.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.rmdup.sort.bam\n";
+						$bam="$lib.pair.rmdup.sort.bam";
+					}
+				}
+				if (defined $mempara) {
+					my $rg="";
+					if (@{$fq{2}}>1) {
+						my $k=$j+1;
+						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
+						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							}
+						}
+					} else {
+						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
+						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							}
 						}
 					}
-					$bwa_cmd .= qq(\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | $samtools view -Sbh - -o $lib.pair.$k.bam\n);
-					$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
-					$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.rmdup.bam $lib.pair.$k.rmdup.sort\n";
-					$bwa_cmd .= "\${samtools} index $lib.pair.$k.rmdup.sort.bam\n";
-					$bam="$lib.pair.$k.rmdup.sort.bam";
-				} else {
-					my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
-					my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
-					my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
-					my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
-					my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
-					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-					foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
-					{
-						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
-						{
-							$rg=~s/\'$//;
-							$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
-						}
-					}
-					$bwa_cmd .= "\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | $samtools view -Sbh - -o $lib.pair.bam\n";
-					$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
-					$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.rmdup.bam $lib.pair.rmdup.sort\n";
-					$bwa_cmd .= "\${samtools} index $lib.pair.rmdup.sort.bam\n";
-					$bam="$lib.pair.rmdup.sort.bam";
+					$bwa_cmd .= "\${bwa} mem \${mempara} -r $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
 				}
 ## Fix mate
 #java -Xmx${heap}m -Djava.io.tmpdir\=${tmp_folder}_fixmate \
@@ -1303,13 +1351,14 @@ sub runbowtie($$) {
 	$bowtie_cmd .= qq(export samtools="$samtools"\n);
 	my $reference=checkPath($self->{"database:$ref"});
 	$bowtie_cmd.="export reference=$reference\n";
-	my $bowtiepara=$self->{'CustomSetting:tophat'};
-	$bowtie_cmd.=qq(export tophatpara="$bowtiepara"\n);
+	my $bowtiepara=$self->{'CustomSetting:bowtie'};
+	$bowtie_cmd.=qq(export bowtiepara="$bowtiepara"\n);
 	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
 	$bowtie_version=$1 if ($bowtiepara=~/(bowtie[2]?)/);
 	if (defined $bowtie_version && $bowtie !~ /$bowtie_version$/)
 	{
 		$bowtie =~ s/[^\/]+$/$bowtie_version/;
+		$reference=$1 if ($reference=~/(\S+)\.fa/i);
 	}
 	my $bowtie_build="$bowtie-build";
 	$bowtie_cmd.="export bowtie_build=$bowtie_build\n";
@@ -1322,6 +1371,8 @@ sub runbowtie($$) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$bowtie_cmd .= qq(mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
 	$bowtie_cmd .= "cd \${alndir}\n";
+#bowtie [options]* <ebwt> {-1 <m1> -2 <m2> | --12 <r> | <s>} [<hit>]
+#bowtie2 [options]* -x <bt2-idx> {-1 <m1> -2 <m2> | -U <r>} -S [<hit>]
 	foreach my $lib(@libraries) {
 		$bowtie_cmd .= qq(echo `date`; echo "$lib"\n);
 		$bowtie_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$alndir/$lib));
@@ -1333,17 +1384,93 @@ sub runbowtie($$) {
 			my @fq2=@{$fq{2}};
 			my $fq1=join ",",@fq1;
 			my $fq2=join ",",@fq2;
+			my @rg=();
+			my $ID=(exists $self->{$lib}{'fq1'}{0}{'ID'})?$self->{$lib}{'fq1'}{0}{'ID'}:$lib;
+			my $SM=(exists $self->{$lib}{'fq1'}{0}{'SM'})?$self->{$lib}{'fq1'}{0}{'SM'}:$lib;
+			push @rg,"SM:$SM";
+			my $LB=(exists $self->{$lib}{'fq1'}{0}{'LB'})?$self->{$lib}{'fq1'}{0}{'LB'}:$lib;
+			push @rg,"LB:$LB";
+			my $PL=(exists $self->{$lib}{'fq1'}{0}{'PL'})?$self->{$lib}{'fq1'}{0}{'PL'}:"ILLUMINA";
+			push @rg,"PL:$LB";
+			foreach my $rb(keys %{$self->{$lib}{'fq'}{0}})
+			{
+				if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+				{
+					push @rg,qq($rb:$self->{$lib}{'fq'}{0}{$rb}');
+				}
+			}
+			if ($bowtie_version=~/2$/) {
+				#--rg-id HWI-SN957Lane7 --rg SM:ZEN456A1 --rg LB:ZEN456A1LI5 --rg PI:400 --rg PL:ILLUMINA
+				my $samrg="--rg-id $ID ".(join "--rg ",@rg);
+				$bowtie_cmd .= qq(\${bowties} \${bowtiepara} $samrg -x \$REFERENCE -1 $fq1 -2 $fq2 -S | \${samtools} -Sbh - -o $lib.pair.bam\n);
+				push @bam,qq($workdir/$alndir/$lib/$lib.pair.bam);
+			} else {
+				#--sam-RG ID:HWI-SN957Lane7 --sam-RG SM:ZEN456A1 --sam-RG LB:ZEN456A1LI5 --sam-RG PI:400 --sam-RG PL:ILLUMINA
+				my $samrg="--sam-RG $ID ".(join "--sam-RG ",@rg);
+				$bowtie_cmd .= qq(\${bowties} \${bowtiepara} $samrg \$REFERENCE -1 $fq1 -2 $fq2 | \${samtools} -Sbh - -o $lib.pair.bam\n);
+				push @bam,qq($workdir/$alndir/$lib/$lib.pair.bam);
+			}
 		}
 		if (exists $fq{0} && @{$fq{0}}>0){
-			
+			my $fq=join ",",@{$fq{0}};
+			my @rg="";
+			my $ID=(exists $self->{$lib}{'fq'}{0}{'ID'})?$self->{$lib}{'fq'}{0}{'ID'}:$lib;
+			my $SM=(exists $self->{$lib}{'fq'}{0}{'SM'})?$self->{$lib}{'fq'}{0}{'SM'}:$lib;
+			push @rg,"SM:$SM";
+			my $LB=(exists $self->{$lib}{'fq'}{0}{'LB'})?$self->{$lib}{'fq'}{0}{'LB'}:$lib;
+			push @rg,"LB:$LB";
+			my $PL=(exists $self->{$lib}{'fq'}{0}{'PL'})?$self->{$lib}{'fq'}{0}{'PL'}:"ILLUMINA";
+			push @rg,"PL:$LB";
+			foreach my $rb(keys %{$self->{$lib}{'fq'}{0}})
+			{
+				if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+				{
+					push @rg,qq(\\t$rb:$self->{$lib}{'fq'}{0}{$rb}');
+				}
+			}
+			if ($bowtie_version=~/2$/) {
+				my $samrg="--rg-id $ID ".(join "--rg ",@rg);
+				$bowtie_cmd .= qq(\${bowties} \${bowtiepara} $samrg -x \$REFERENCE -U $fq | \${samtools} -Sbh - -o $lib.single.bam\n);
+				push @bam,qq($workdir/$alndir/$lib/$lib.single.bam);
+			} else {
+				my $samrg="--sam-RG $ID ".(join "--sam-RG ",@rg);
+				$bowtie_cmd .= qq(\${bowties} \${bowtiepara} $samrg \$REFERENCE $fq | \${samtools} -Sbh - -o $lib.single.bam\n);
+				push @bam,qq($workdir/$alndir/$lib/$lib.single.bam);
+			}
 		}
 		if (@bam>1)
 		{
-			
+			if (exists $self->{"software:picard"}) {
+				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+				$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
+				my $MergeSamFilesPara=$self->{"CustomSetting:MergeSamFiles"};
+				my $merge_bam=join " INPUT=",@bam;
+				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
+				$bowtie_cmd .= "\${samtools} index $lib.merge.bam\n";
+				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort - $lib.merge.rmdup.sort\n";
+				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
+				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
+				@{$self->{$lib}{"$ref-bowtiebam"}}=();
+				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$lib.merge.rmdup.sort.bam";
+			} else {
+				my $merge_bam=join " ",@bam;
+				$bowtie_cmd .= qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam\n);
+				foreach my $tophatbam(@bam)
+				{
+					$bowtie_cmd .=  qq(\${samtools} view -H $tophatbam |grep RG >> $lib.inh.sam\n);
+				}
+				$bowtie_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
+				$bowtie_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam\n";
+				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort - $lib.merge.rmdup.sort\n";
+				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
+				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
+				@{$self->{$lib}{"$ref-bowtiebam"}}=();
+				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$lib.merge.rmdup.sort.bam";
+			}
 		}
 		else
 		{
-			
+			@{$self->{$lib}{"$ref-bowtiebam"}}=@bam;
 		}
 	}
 	$bowtie_cmd .= "cd ..\n";
@@ -2487,21 +2614,7 @@ sub runScripture ($) {
 
 #########################################################
 #                                                       #
-#                    Gene Fusion                        #
-#                                                       #
-#########################################################
-
-sub runTophatFusion ($) {
-	my $self = shift;
-}
-
-sub runSOAPfusion ($) {
-	my $self = shift;
-}
-
-#########################################################
-#                                                       #
-#               ChiP-seq/MeDIP-seq                      #
+#                 ChiP-seq/MeDIP-seq                    #
 #                                                       #
 #########################################################
 
@@ -2608,6 +2721,26 @@ sub runEVM ($) {
 	my $self=shift;
 }
 
+#########################################################
+#                                                       #
+#                    Gene Fusion                        #
+#                                                       #
+#########################################################
+
+sub runTophatFusion ($) {
+	my $self = shift;
+}
+
+sub runSOAPfusion ($) {
+	my $self = shift;
+}
+
+#########################################################
+#                                                       #
+#                    Gene Editing                       #
+#                                                       #
+#########################################################
+
 sub runRepeatMasker ($) {
 	
 }
@@ -2622,7 +2755,8 @@ sub runCirCOS ($) {
 
 sub runClustalW2($) {
 	my $self=shift;
-	my $clustalw2=(-f "/usr/local/bin/clustalw2" && -e "/usr/local/bin/clustalw2") ? "/usr/local/bin/clustalw2" : checkPath($self->{"software:clustalw2"});
+	my $which=`which clustalw2`;chomp $which;
+	my $clustalw2=(-f $which && -e $which) ? $which : checkPath($self->{"software:clustalw2"});
 	if (!defined $clustalw2)
 	{
 		return "";
@@ -2675,6 +2809,40 @@ sub runClustalW2($) {
 sub runMrBayes
 {
 	my $self=shift;
+	my $which = `which mb`;chomp $which;
+	my $mb = (-f $which && -e $which) ? $which : checkPath($self->{"software:mb"});
+	if (!defined $mb) {
+		return "";
+	}
+	my $mb_cmd=qq(echo `date`; echo "run MrBayes"\n);
+	$mb_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$mb_cmd.=qq(export mb=$mb\n);
+	my $conf=(exists $self->{"CustomSetting:mb"})?$self->{"CustomSetting:mb"}:"\tlset nst=6 rates=invgamma;\n\tmcmc ngen=20000000;\n\tsump relburnin=yes burninfrac=0.25;\n\tsumt relburnin=yes burninfrac=0.25;\n";
+	$mb_cmd.=qq(export mb_conf=$conf\n);
+	my $phylogen_outdir = (exists $self->{"CustomSetting:phylogen_outdir"}) ? $self->{"CustomSetting:phylogen_outdir"} : "phylogen";
+	my $workdir=checkPath($self->{"-workdir"});
+	$mb_cmd.=qq(export workdir=$workdir\n);
+	$mb_cmd.=qq(export phylgen_outdir=$phylogen_outdir\n);
+	$mb_cmd.=qq(cd \${wordir}\n);
+	$mb_cmd.=qq(mkdir \${phylgen_outdir}\n) if (!-d qq($self->{"-workdir"}/$phylogen_outdir));
+	$mb_cmd.=qq(cd \${phylgen_outdir}\n);
+	if (exists $self->{"NEXUS"}) {
+		$mb_cmd.=qq(echo "begin mrbayes;\n\${mb_conf}\nend;\n" > batch.txt\n);
+		$mb_cmd.=qq(mb batch.txt\n);
+	}else {
+		my @libraries=sort keys %{$self->{'LIB'}};
+		foreach my $lib(@libraries) {
+			$mb_cmd.="mkdir $lib\n";
+			$mb_cmd.="cd $lib\n";
+			for (my $i=0;$i<@{$self->{$lib}{"NEXUS"}};$i++)
+			{
+				
+			}
+			$mb_cmd.="cd ..\n";
+		}
+	}
+	$mb_cmd.="cd ..\n";
+	
 #begin mrbayes;      
 #
 #exec example.nex;
