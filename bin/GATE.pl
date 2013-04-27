@@ -66,7 +66,7 @@ Version: v0.1.6 nightly, Apr 1st, 2013
     *ncrna		non-coding RNA analysis
     *anno		annotation
     *repeat		repeat finding
-    *phylogen		phylogenetics analysis
+    phylogen		phylogenetics analysis
     *stat		statistical analysis
     plot		plot figure
 
@@ -264,7 +264,7 @@ my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
 qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
 edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
 );
-my @cmd_ary = qw(qc aln var exp diff as plot);
+my @cmd_ary = qw(qc aln var exp diff as plot denovo phylogen);
 
 # make jobs submit shell scripts
 #my %custom_cmd = ();

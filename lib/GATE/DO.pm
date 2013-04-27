@@ -2827,8 +2827,8 @@ sub runMrBayes
 	$mb_cmd.=qq(mkdir \${phylgen_outdir}\n) if (!-d qq($self->{"-workdir"}/$phylogen_outdir));
 	$mb_cmd.=qq(cd \${phylgen_outdir}\n);
 	if (exists $self->{"NEXUS"}) {
-		$mb_cmd.=qq(echo "begin mrbayes;\n\${mb_conf}\nend;\n" > batch.txt\n);
-		$mb_cmd.=qq(mb batch.txt\n);
+		$mb_cmd.=qq(echo "begin mrbayes;\n\texec $self->{"NEXUS"}\n\${mb_conf}\nend;\n" > batch.txt\n);
+		$mb_cmd.=qq(\${mb} batch.txt\n);
 	}else {
 		my @libraries=sort keys %{$self->{'LIB'}};
 		foreach my $lib(@libraries) {
@@ -2836,22 +2836,14 @@ sub runMrBayes
 			$mb_cmd.="cd $lib\n";
 			for (my $i=0;$i<@{$self->{$lib}{"NEXUS"}};$i++)
 			{
-				
+				$mb_cmd.=qq(echo "begin mrbayes;\\texec ${$self->{$lib}{"NEXUS"}}[$i]\n\${mb_conf}\nend;\n" > $lib-$i.batch.txt\n);
+				$mb_cmd.=qq(\${mb} $lib-$i.batch.txt\n);
 			}
 			$mb_cmd.="cd ..\n";
 		}
 	}
 	$mb_cmd.="cd ..\n";
-	
-#begin mrbayes;      
-#
-#exec example.nex;
-#lset nst=6 rates=invgamma;
-#mcmc ngen=20000000;
-#sump relburnin=yes burninfrac=0.25;
-#sumt relburnin=yes burninfrac=0.25;
-#end;
-
+	return $mb_cmd;
 }
 
 
