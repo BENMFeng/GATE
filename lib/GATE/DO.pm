@@ -29,7 +29,7 @@ use Cwd;
 sub parseConfig($) {
 	my $self = shift;
 	my $file=checkPath($self->{'-config'});
-	my ($name,$index,$lib,$mergepe)=("","","",""); 
+	my ($name,$index,$barcode,$lib,$mergepe)=("","","","",""); 
 	my %RG;
 	my %countSample;
 	open (IN,$file) || die "Can't open config file:$file for reading\n";
@@ -60,6 +60,8 @@ sub parseConfig($) {
 				$lib=$1;
 			} elsif(/Index\=([^\=]+)/) {
 				$index=$1;
+			} elsif (/Barcode\=([^\=]+)/) {
+				$barcode=$1;
 			} elsif (/MergePE\=([^\=]+)/) {
 				$mergepe=$1;
 			} elsif (/^fq/i || /^fa/i) {
@@ -72,6 +74,8 @@ sub parseConfig($) {
 					${$self->{$name}{$lib}{$type}}[$countSample{"$name $lib $type"}-1]=checkPath($path);
 					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'Index'}=$index if (defined $index && $index ne "");
 					$self->{'idx'}{$lib}=1 if (defined $index && $index ne "");
+					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'Barcode'}=$barcode if (defined $barcode && $barcode ne "");
+					$self->{'bar'}{$lib}=1 if (defined $barcode && $barcode ne "");
 					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'MergePE'}=$mergepe if (defined $mergepe && $mergepe =~ /^[TY]/i);
 					$self->{'pemerge'}{$lib}=1 if (defined $mergepe && $mergepe ne "");
 					$RG{'LB'}=$lib if (defined $lib && !exists $RG{'LB'});
@@ -149,7 +153,7 @@ sub parseDir($) {
 
 sub selectIdxFastq ($) {
 	my $self = shift;
-	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || !exists $self->{'idx'}) {
+	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || (!exists $self->{'idx'} && !exists $self->{'bar'})) {
 		return "";
 	}
 	my $selectIdxFastq=$self->{"software:selectIdxFastq"};
@@ -163,7 +167,7 @@ sub selectIdxFastq ($) {
 	my $withIdx=0;
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
-		next if (!exists $self->{'idx'}{$lib});
+		next if (!exists $self->{'idx'}{$lib} && !exists $self->{'bar'}{$lib});
 		$Idx_cmd_multi.=$Idx_cmd_multi_head;
 		$Idx_cmd .= qq(echo `date`; echo "$lib"\n);
 		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
@@ -211,13 +215,17 @@ sub selectIdxFastq ($) {
 				for (my $k=0;$k<@fq2;$k++){
 					my $reads1=$fq1[$k];
 					my $reads2=$fq2[$k];
-					if (exists $self->{$lib}{$lbmark}{$k}{"Index"} && $self->{$lib}{$lbmark}{$k}{"Index"} ne "") {
-						my $index=$self->{$lib}{$lbmark}{$k}{"Index"};
+					if ( (exists $self->{$lib}{$lbmark}{$k}{"Index"} && $self->{$lib}{$lbmark}{$k}{"Index"} ne "") ||
+					    (exists $self->{$lib}{$lbmark}{$k}{"Barcode"} && $self->{$lib}{$lbmark}{$k}{"Barcode"} ne "") ){
+						my $index=$self->{$lib}{$lbmark}{$k}{"Index"} if (exists $self->{$lib}{$lbmark}{$k}{"Index"});
+						my $barcode=$self->{$lib}{$lbmark}{$k}{"Barcode"} if (exists $self->{$lib}{$lbmark}{$k}{"Barcode"});
 						my $name1=(split /\//,$reads1)[-1];
 						my $name2=(split /\//,$reads2)[-1];
 						my $out1="$1.$index.fastq" if ($name1=~/(\S+)\.fastq$/i || $name1=~/(\S+)\.fq$/i || $name1=~/(\S+)\.fastq\.gz$/i || $name1=~/(\S+)\.fq\.gz$/i);
 						my $out2="$1.$index.fastq" if ($name2=~/(\S+)\.fastq$/i || $name2=~/(\S+)\.fq$/i || $name2=~/(\S+)\.fastq\.gz$/i || $name2=~/(\S+)\.fq\.gz$/i);
-						$Idx_cmd .= qq($selectIdxFastq -fastq1 $reads1 -fastq2 $reads2 -index $index\n);
+						$Idx_cmd .= qq($selectIdxFastq -fastq1 $reads1 -fastq2 $reads2 );
+						$Idx_cmd .= qq( -index $index ) if (defined $index);
+						$Idx_cmd .= qq( -barcode $barcode ) if (defined $index);
 						$Idx_cmd_multi .= qq($selectIdxFastq -fastq1 $reads1 -fastq2 $reads2 -index $index && );
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2));
