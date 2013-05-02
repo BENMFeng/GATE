@@ -163,7 +163,7 @@ sub selectIdxFastq ($) {
 	$Idx_cmd .= qq(cd $self->{"-workdir"}\n);
 	$Idx_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$Idx_cmd .= qq(export selectIdxFastq=$selectIdxFastq\n);
-	$Idx_cmd .= qq(export selectIdxFastq_para=$para\n);
+	$Idx_cmd .= qq(export selectIdxFastq_para="$para"\n);
 	$Idx_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$Idx_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my $Idx_cmd_multi_head=$Idx_cmd;

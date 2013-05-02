@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 # Authore: BENM <binxiaofeng\@gmail.com>
-# Version: v1.0, 2013-02-01
+# Version: v1.1, 2013-05-03
 use strict;
 use Getopt::Long;
 use Data::Dumper;
@@ -17,9 +17,8 @@ $Mismatch ||= 1 if (!defined $Mismatch);
 my ($Bar1,$Bar2)=split /\:/,$Barcode if (defined $Barcode);
 my ($Out1,$Out2,$StatOut)=("","","");
 my %Idx=();
-my $Index_len=0;
+my $Index_len=(defined $Index)?length($Index):0;
 if (defined $Index && $Mismatch>0) {
-	$Index_len=length($Index);
 	my @idx_ary=split //,$Index;
 	my @idx_idx=();
 	for (my $i=0;$i<$Index_len;$i++) {
