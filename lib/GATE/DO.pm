@@ -227,19 +227,19 @@ sub selectIdxFastq ($) {
 						my $name2=(split /\//,$reads2)[-1];
 						my $out1=$1 if ($name1=~/(\S+)\.fastq$/i || $name1=~/(\S+)\.fq$/i || $name1=~/(\S+)\.fastq\.gz$/i || $name1=~/(\S+)\.fq\.gz$/i);
 						$out1.="\.$index" if (defined $index);
-						$out1.="\.$1" if (defined $barcode=~/^([^\:\s])+/);
+						$out1.="\.$1" if (defined $barcode && $barcode=~/^([^\:\s])+/);
 						$out1.="\.fastq";
 						my $out2=$1 if ($name2=~/(\S+)\.fastq$/i || $name2=~/(\S+)\.fq$/i || $name2=~/(\S+)\.fastq\.gz$/i || $name2=~/(\S+)\.fq\.gz$/i);
 						$out2.="\.$index" if (defined $index);
-						$out2.="\.$1" if (defined $barcode=~/([^\:\s])+$/);
+						$out2.="\.$1" if (defined $barcode && $barcode=~/([^\:\s])+$/);
 						$out2.="\.fastq";
 						$Idx_cmd .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq1 $reads1 -fastq2 $reads2 );
 						$Idx_cmd .= qq( -index $index ) if (defined $index);
-						$Idx_cmd .= qq( -barcode $barcode ) if (defined $index);
+						$Idx_cmd .= qq( -barcode $barcode ) if (defined $barcode);
 						$Idx_cmd .= qq(\n);
 						$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq1 $reads1 -fastq2 $reads2);
 						$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
-						$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $index);
+						$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $barcode);
 						$Idx_cmd_multi .= qq( && );
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2));
@@ -265,15 +265,15 @@ sub selectIdxFastq ($) {
 							my $out1=(split /\//,$reads1)[-1];
 							$out1="$1.$index.fastq" if ($out1=~/(\S+)\.fastq$/i || $out1=~/(\S+)\.fq$/i || $out1=~/(\S+)\.fastq\.gz$/i || $out1=~/(\S+)\.fq\.gz$/i);
 							$out1.="\.$index" if (defined $index);
-							$out1.="\.$1" if (defined $barcode=~/^([^\:\s])+/);
+							$out1.="\.$1" if (defined $barcode && $barcode=~/^([^\:\s])+/);
 							$out1.="\.fastq";
 							$Idx_cmd .= qq(\${selectIdxFastq} \${selectIdxFastq_para}  -fastq $reads1 );
 							$Idx_cmd .= qq( -index $index ) if (defined $index);
-							$Idx_cmd .= qq( -barcode $barcode ) if (defined $index);
+							$Idx_cmd .= qq( -barcode $barcode ) if (defined $barcode);
 							$Idx_cmd .= qq(\n);
 							$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq $reads1 );
 							$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
-							$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $index);
+							$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $barcode);
 							$Idx_cmd_multi .= qq( && );
 							die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 							${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
@@ -1127,7 +1127,42 @@ sub runBWA($$) {
 		if (exists $fq{1} && exists $fq{2}){
 			for (my $j=0;$j<@{$fq{2}};$j++) {
 				my $bam="";
-				if (defined $alnpara) {
+				if (defined $mempara) {
+					my $rg="";
+					if (@{$fq{2}}>1) {
+						my $k=$j+1;
+						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
+						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							}
+						}
+					} else {
+						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
+						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+							}
+						}
+					}
+					$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
+				} elsif (defined $alnpara) {
 					my $sai1=(split /\//,${$fq{1}}[$j])[-1];
 					my $sai2=(split /\//,${$fq{2}}[$j])[-1];
 					$sai1=~s/\.gz//i;
@@ -1182,42 +1217,6 @@ sub runBWA($$) {
 						$bwa_cmd .= "\${samtools} index $lib.pair.rmdup.sort.bam\n";
 						$bam="$lib.pair.rmdup.sort.bam";
 					}
-				}
-				if (defined $mempara) {
-					my $rg="";
-					if (@{$fq{2}}>1) {
-						my $k=$j+1;
-						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
-						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
-						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
-						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
-						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
-						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
-						{
-							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
-							{
-								$rg=~s/\'$//;
-								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
-							}
-						}
-					} else {
-						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
-						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
-						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
-						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
-						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
-						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
-						{
-							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
-							{
-								$rg=~s/\'$//;
-								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
-							}
-						}
-					}
-					$bwa_cmd .= "\${bwa} mem \${mempara} -r $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
 				}
 ## Fix mate
 #java -Xmx${heap}m -Djava.io.tmpdir\=${tmp_folder}_fixmate \

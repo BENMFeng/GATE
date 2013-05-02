@@ -41,7 +41,7 @@ if (defined $Index) {
 				$left = $left/5;
 			}
 			if (length($m)<$Mismatch) {
-				$m.="0"x($Mismatch-length($m));
+				$m .= "0"x($Mismatch-length($m));
 			}
 			
 			my @loc_idx=split "",$m;
