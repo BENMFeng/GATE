@@ -9,7 +9,7 @@ my %opts;
 my ($Reads1,$Reads2,$Barcode,$Index,$Qual,$Mismatch,$Prefix,$Help);
 GetOptions(%opts,"fastq1:s"=>\$Reads1,"fastq2:s"=>\$Reads2,"fastq:s"=>\$Reads1,"index:s"=>\$Index,"barcode:s"=>\$Barcode,"mis:i"=>\$Mismatch,"qual:s"=>\$Qual,"prefix:s"=>\$Prefix,"help"=>\$Help);
 
-die qq(perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq [-index index] [-barcode bc1:bc2] [-prefix prefixName] [-mis 1] [-qual 30 or "?"]\n) if (!defined $Reads1 || !defined $Barcode || defined $Help);
+die qq(perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq [-index index] [-barcode bc1:bc2] [-prefix prefixName] [-mis 1] [-qual 30 or "?"]\n) if (!defined $Reads1 || (!defined $Barcode && !defined $Index) || defined $Help);
 
 $Qual ||= 30;
 $Qual = ord($Qual)-33 unless ($Qual=~/^\d+/ && $Qual>=10);
@@ -98,24 +98,26 @@ open (OUT2,">$Out2") if (defined $Reads2 && $Reads2 ne "");
 while(<IN1>)
 {
 	my $out1=$_;
-	$_=<IN1>;
 	my $withBar=(defined $Barcode)?0:1;
 	my $withIdx=(defined $Index)?0:1;
-	if (/\:[ACGTN]{$Index_len}/) {
+	if (/\:([ACGTN]{$Index_len})/) {
 		my $reads_idx=$1;
 		$withIdx=1 if (exists $Idx{$reads_idx});
 	}
+	$_=<IN1>;
 	if (defined $Bar1 && $_=~/^$Bar1(\S+)/) {
 		$out1.="$1\n";
 		$withBar=1;
+	} elsif (!defined $Bar1) {
+		$out1.=$_;
 	}
 	$_=<IN1>;
 	$out1.=$_;
 	$_=<IN1>;
 	chomp;
-	my $qual1=substr($_,0,length($Bar1));
-	$out1.=($withBar==1)?substr($_,length($Bar1),length($_)-length($Bar1))."\n":"$_\n";
-	my $qualcheck=check_qual($qual1);
+	my $qual1=substr($_,0,length($Bar1)) if (defined $Bar1);
+	my $qualcheck=(defined $Barcode)?check_qual($qual1):1;
+	$out1.=($withBar==1 && defined $Bar1)?substr($_,length($Bar1),length($_)-length($Bar1))."\n":"$_\n";
 	if (defined $Reads2 && $Reads2 ne "")
 	{
 		$_=<IN2>;
@@ -142,7 +144,7 @@ while(<IN1>)
 		$qualcheck=check_qual($qual2) if (defined $qual2 && $qual2 ne "");
 		$_=<IN2>;
 		chomp;
-		$out2.=($withBar==1 && defined $Bar2 && $Bar2 ne "")?substr($_,length($Bar2),length($_)-length($Bar2))."\n":"$_\n";
+		$out2.=(defined $Barcode && defined $Bar2 && $Bar2 ne "")?substr($_,length($Bar2),length($_)-length($Bar2))."\n":"$_\n";
 		print OUT2 $out2 if ($withIdx==1 && $withBar == 1 && $qualcheck==1);
 	}
 	print OUT1 $out1 if ($withIdx==1 && $withBar == 1 && $qualcheck==1);

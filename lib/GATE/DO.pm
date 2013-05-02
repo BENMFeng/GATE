@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9f,04-26-2013";
+$VERSION = "0.9g,05-02-2013";
 package GATE::Element;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
@@ -157,9 +157,13 @@ sub selectIdxFastq ($) {
 		return "";
 	}
 	my $selectIdxFastq=$self->{"software:selectIdxFastq"};
+	my $para=(exists $self->{"CustomSetting:selectIdxFastq"})?$self->{"CustomSetting:selectIdxFastq"}:"-mis 1 -qual 30";
+	$para=~s/\-.+prefix\s+\S+//;
 	my $Idx_cmd = qq(echo `date`; echo "run selectIdxFastq"\n);
 	$Idx_cmd .= qq(cd $self->{"-workdir"}\n);
 	$Idx_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$Idx_cmd .= qq(export selectIdxFastq=$selectIdxFastq\n);
+	$Idx_cmd .= qq(export selectIdxFastq_para=$para\n);
 	$Idx_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$Idx_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my $Idx_cmd_multi_head=$Idx_cmd;
@@ -229,11 +233,11 @@ sub selectIdxFastq ($) {
 						$out2.="\.$index" if (defined $index);
 						$out2.="\.$1" if (defined $barcode=~/([^\:\s])+$/);
 						$out2.="\.fastq";
-						$Idx_cmd .= qq($selectIdxFastq -fastq1 $reads1 -fastq2 $reads2 );
+						$Idx_cmd .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq1 $reads1 -fastq2 $reads2 );
 						$Idx_cmd .= qq( -index $index ) if (defined $index);
 						$Idx_cmd .= qq( -barcode $barcode ) if (defined $index);
 						$Idx_cmd .= qq(\n);
-						$Idx_cmd_multi .= qq($selectIdxFastq -fastq1 $reads1 -fastq2 $reads2);
+						$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq1 $reads1 -fastq2 $reads2);
 						$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
 						$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $index);
 						$Idx_cmd_multi .= qq( && );
@@ -263,11 +267,11 @@ sub selectIdxFastq ($) {
 							$out1.="\.$index" if (defined $index);
 							$out1.="\.$1" if (defined $barcode=~/^([^\:\s])+/);
 							$out1.="\.fastq";
-							$Idx_cmd .= qq($selectIdxFastq -fastq $reads1 );
+							$Idx_cmd .= qq(\${selectIdxFastq} \${selectIdxFastq_para}  -fastq $reads1 );
 							$Idx_cmd .= qq( -index $index ) if (defined $index);
 							$Idx_cmd .= qq( -barcode $barcode ) if (defined $index);
 							$Idx_cmd .= qq(\n);
-							$Idx_cmd_multi .= qq($selectIdxFastq -fastq $reads1 );
+							$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq $reads1 );
 							$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
 							$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $index);
 							$Idx_cmd_multi .= qq( && );
