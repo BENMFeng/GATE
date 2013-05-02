@@ -192,7 +192,9 @@ if (defined $Stat)
 		}
 	}
 	print ST "\n";
-	print ST "Total Reads: $totalReads\n";
+	print ST "Total Reads: $totalReads";
+	print ST " + $totalReads" if (exists $StatHash{'sel'}{'R2'});
+	print ST "\n";
 	print ST qq(R1 selected reads: $StatHash{'sel'}{'R1'}\n) if (exists $StatHash{'sel'}{'R1'});
 	print ST qq(R2 selected reads: $StatHash{'sel'}{'R2'}\n) if (exists $StatHash{'sel'}{'R2'});
 	close ST;
