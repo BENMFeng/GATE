@@ -6,10 +6,10 @@ use Getopt::Long;
 use Data::Dumper;
 
 my %opts;
-my ($Reads1,$Reads2,$Barcode,$Index,$Qual,$Mismatch,$Prefix,$Help);
-GetOptions(%opts,"fastq1:s"=>\$Reads1,"fastq2:s"=>\$Reads2,"fastq:s"=>\$Reads1,"index:s"=>\$Index,"barcode:s"=>\$Barcode,"mis:i"=>\$Mismatch,"qual:s"=>\$Qual,"prefix:s"=>\$Prefix,"help"=>\$Help);
+my ($Reads1,$Reads2,$Barcode,$Index,$Qual,$Mismatch,$Prefix,$Debug,$Help);
+GetOptions(%opts,"fastq1:s"=>\$Reads1,"fastq2:s"=>\$Reads2,"fastq:s"=>\$Reads1,"index:s"=>\$Index,"barcode:s"=>\$Barcode,"mis:i"=>\$Mismatch,"qual:s"=>\$Qual,"prefix:s"=>\$Prefix,"debug"=>\$Debug,"help"=>\$Help);
 
-die qq(perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq [-index index] [-barcode bc1:bc2] [-prefix prefixName] [-mis 1] [-qual 30 or "?"]\n) if (!defined $Reads1 || (!defined $Barcode && !defined $Index) || defined $Help);
+die qq(perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq [-index index] [-barcode bc1:bc2] [-prefix prefixName] [-mis 1] [-qual 30 or "?"]\n) if ((!defined $Reads1 || (!defined $Barcode && !defined $Index) || defined $Help)&&(!defined $Debug));
 
 $Qual ||= 30;
 $Qual = ord($Qual)-33 unless ($Qual=~/^\d+/ && $Qual>=10);
@@ -30,26 +30,34 @@ if (defined $Index) {
 	my @base=("A","C","G","T","N");
 	for (my $j=0;$j<@COMB;$j++) {;
 		my @var_loc=@{$COMB[$j]};
+		#print ((join "",@var_loc),"\n") if ($Debug);
 		for (my $k=0;$k<5**scalar(@var_loc);$k++)
 		{
 			my @tmp=@idx_ary;
-			my $m=$k % 5;;
+			my $m = $k % 5;
 			my $left=$k/5;
 			while ($left>=1) {
 				$m .= $left % 5;
 				$left = $left/5;
 			}
+			if (length($m)<$Mismatch) {
+				$m.="0"x($Mismatch-length($m));
+			}
+			
 			my @loc_idx=split "",$m;
+			#print ((join " ",@loc_idx),"\n") if ($Debug);
 			for (my $i=0;$i<@loc_idx;$i++)
 			{
 				$tmp[$var_loc[$i]]=$base[$loc_idx[$i]];
 			}
 			my $idx_p=join "",@tmp;
+			print "$idx_p\n" if ($Debug);
 			$Idx{$idx_p}=1;
 		}
 	}
 }
 
+exit() if ($Debug);
 
 if (defined $Prefix)
 {
