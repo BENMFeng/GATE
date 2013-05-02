@@ -54,13 +54,13 @@ if (defined $Index) {
 if (defined $Prefix)
 {
 	$Out1=$Prefix;
-	$Out1.=".$Bar1" if (defined $Bar1 && $Bar1 ne "");
-	$Out1.=".$Index" if (defined $Index && $Index ne "");
+	$Out1.="\.$Index" if (defined $Index && $Index ne "");
+	$Out1.="\.$Bar1" if (defined $Bar1 && $Bar1 ne "");
 	$Out1.="\_1.fastq";
 	$Out2=$Prefix;
 	my $bar=(defined $Bar2 && $Bar2 ne "")?$Bar2:$Bar1;
-	$Out2.=".$bar" if (defined $bar && $bar ne "");
-	$Out2.=".$Index" if (defined $Index && $Index ne "");
+	$Out2.="\.$Index" if (defined $Index && $Index ne "");
+	$Out2.="\.$bar" if (defined $bar && $bar ne "");
 	$Out2.="\_2.fastq";
 }
 else
@@ -69,9 +69,9 @@ else
 	if ($Out1=~/([^\/\s]+)\.fastq$/ || $Out1=~/([^\/\s]+)\.fastq\.gz$/)
 	{
 		$Out1= $1;
-		$Out1.=".$Bar1" if (defined $Bar1 && $Bar1 ne "");
-		$Out1.=".$Index" if (defined $Index && $Index ne "");
-		$Out1.=".fastq";
+		$Out1.="\.$Index" if (defined $Index && $Index ne "");
+		$Out1.="\.$Bar1" if (defined $Bar1 && $Bar1 ne "");
+		$Out1.="\.fastq";
 	}
 	if (defined $Reads2 && $Reads2 ne "")
 	{
@@ -80,9 +80,9 @@ else
 		if ($Out2=~/([^\/\s]+)\.fastq$/ || $Out2=~/([^\/\s]+)\.fastq\.gz$/)
 		{
 			$Out2=$1;
-			$Out2.=".$bar" if (defined $bar && $bar ne "");
-			$Out2.=".$Index" if (defined $Index && $Index ne "");
-			$Out2.=".fastq";
+			$Out2.="\.$Index" if (defined $Index && $Index ne "");
+			$Out2.="\.$bar" if (defined $bar && $bar ne "");
+			$Out2.="\.fastq";
 		}
 	}
 }
