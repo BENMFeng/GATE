@@ -13,12 +13,12 @@ die qq(perl $0 -fastq1 reads1.fastq -fastq2 reads2.fastq [-index index] [-barcod
 
 $Qual ||= 30;
 $Qual = ord($Qual)-33 unless ($Qual=~/^\d+/ && $Qual>=10);
-$Mismatch ||= 1;
+$Mismatch ||= 1 if (!defined $Mismatch);
 my ($Bar1,$Bar2)=split /\:/,$Barcode if (defined $Barcode);
 my ($Out1,$Out2)=("","");
 my %Idx=();
 my $Index_len=0;
-if (defined $Index) {
+if (defined $Index && $Mismatch>0) {
 	$Index_len=length($Index);
 	my @idx_ary=split //,$Index;
 	my @idx_idx=();
@@ -43,7 +43,6 @@ if (defined $Index) {
 			if (length($m)<$Mismatch) {
 				$m .= "0"x($Mismatch-length($m));
 			}
-			
 			my @loc_idx=split "",$m;
 			#print ((join " ",@loc_idx),"\n") if ($Debug);
 			for (my $i=0;$i<@loc_idx;$i++)
@@ -55,8 +54,10 @@ if (defined $Index) {
 			$Idx{$idx_p}=1;
 		}
 	}
+} elsif ($Mismatch==0) {
+	$Idx{$Index}=1;
 }
-
+print Dumper %Idx if ($Debug);
 exit() if ($Debug);
 
 if (defined $Prefix)
