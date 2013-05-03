@@ -263,7 +263,7 @@ sub selectIdxFastq ($) {
 							my $index=$self->{$lib}{$lbmark}{$k}{"Index"} if (exists $self->{$lib}{$lbmark}{$k}{"Index"});
 							my $barcode=$self->{$lib}{$lbmark}{$k}{"Barcode"} if (exists $self->{$lib}{$lbmark}{$k}{"Barcode"});
 							my $out1=(split /\//,$reads1)[-1];
-							$out1="$1.$index.fastq" if ($out1=~/(\S+)\.fastq$/i || $out1=~/(\S+)\.fq$/i || $out1=~/(\S+)\.fastq\.gz$/i || $out1=~/(\S+)\.fq\.gz$/i);
+							$out1="$1" if ($out1=~/(\S+)\.fastq$/i || $out1=~/(\S+)\.fq$/i || $out1=~/(\S+)\.fastq\.gz$/i || $out1=~/(\S+)\.fq\.gz$/i);
 							$out1.="\.$index" if (defined $index);
 							$out1.="\.$1" if (defined $barcode && $barcode=~/^([^\:\s])+/);
 							$out1.="\.fastq";
@@ -1134,7 +1134,6 @@ sub runBWA($$) {
 						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
 						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
 						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
-						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
 						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
 						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
 						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
@@ -1145,11 +1144,15 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
 							}
 						}
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.$k.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.rmdup.bam $lib.pair.$k.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.$k.rmdup.sort.bam\n";
+						$bam="$lib.pair.$k.rmdup.sort.bam";
 					} else {
 						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
 						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
 						my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
-						my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
 						my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
 						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
 						foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
@@ -1160,8 +1163,12 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
 							}
 						}
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.rmdup.bam $lib.pair.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.rmdup.sort.bam\n";
+						$bam="$lib.pair.rmdup.sort.bam";
 					}
-					$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
 				} elsif (defined $alnpara) {
 					my $sai1=(split /\//,${$fq{1}}[$j])[-1];
 					my $sai2=(split /\//,${$fq{2}}[$j])[-1];
@@ -1257,53 +1264,98 @@ sub runBWA($$) {
 		}
 		if (exists $fq{0} && @{$fq{0}}>0){
 			for (my $j=0;$j<@{$fq{0}};$j++) {
-				my $sai1=(split /\//,${$fq{0}}[$j])[-1];
-				$sai1=~s/\.gz//i;
-				$sai1=~s/\.fq//i;
-				$sai1=~s/\.fastq//i;
-				$sai1.=".sai";
-				$bwa_cmd .= ("\$bwa aln \${alnpara} \$REFERENCE ${$fq{0}}[$j] > $sai1\n");
-				if (@{$fq{0}}>1) {
-					my $k=$j+1;
-					my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:"$lib-$k";
-					my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
-					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
-					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
-					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
-					{
-						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+				if (defined $mempara) {
+					my $rg="";
+					if (@{$fq{2}}>1) {
+						my $k=$j+1;
+						my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:"$lib-$k";
+						my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+						my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
 						{
-							$rg=~s/\'$//;
-							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+							}
 						}
-					}
-					$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | $samtools view -Sbh - -o $lib.single.$k.bam\n";
-					$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
-					$bwa_cmd .= "\${samtools} sort -m 3000000000  $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
-					$bwa_cmd .= "\${samtools} index $lib.single.$k.rmdup.sort.bam\n";
-					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.$k.rmdup.sort.bam";
-				} else {
-					my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:$lib;
-					my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
-					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
-					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
-					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
-					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
-					{
-						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.$k.rmdup.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.$k.rmdup.sort.bam";
+					} else {
+						my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:$lib;
+						my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+						my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+						$rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
 						{
-							$rg=~s/\'$//;
-							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+							}
 						}
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.rmdup.bam $lib.single.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.rmdup.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.rmdup.sort.bam";
 					}
-					$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | $samtools view -Sbh - -o $lib.single.bam\n";
-					$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
-					$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.rmdup.bam $lib.single.rmdup.sort\n";
-					$bwa_cmd .= "\${samtools} index $lib.single.rmdup.sort.bam\n";
-					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.rmdup.sort.bam";
+					$bwa_cmd .= "rm *.single.bam *.single.?.bam *.rmdup.bam\n" if (exists $self->{"CustomSetting:Clean"});
+				}elsif (defined $alnpara) {
+					my $sai1=(split /\//,${$fq{0}}[$j])[-1];
+					$sai1=~s/\.gz//i;
+					$sai1=~s/\.fq//i;
+					$sai1=~s/\.fastq//i;
+					$sai1.=".sai";
+					$bwa_cmd .= ("\$bwa aln \${alnpara} \$REFERENCE ${$fq{0}}[$j] > $sai1\n");
+					if (@{$fq{0}}>1) {
+						my $k=$j+1;
+						my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:"$lib-$k";
+						my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+						my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+						my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+						my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+							}
+						}
+						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000  $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.$k.rmdup.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.$k.rmdup.sort.bam";
+					} else {
+						my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:$lib;
+						my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+						my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+						my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+						my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+						foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+						{
+							if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+							{
+								$rg=~s/\'$//;
+								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+							}
+						}
+						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.bam\n";
+						$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.rmdup.bam $lib.single.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.rmdup.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.rmdup.sort.bam";
+					}
+					$bwa_cmd .= "rm *.sai *.single.bam *.single.?.bam *.rmdup.bam\n" if (exists $self->{"CustomSetting:Clean"});
 				}
-				$bwa_cmd .= "rm *.sai *.single.bam *.single.?.bam *.rmdup.bam\n" if (exists $self->{"CustomSetting:Clean"});
 			}
 		}
 		if (exists $self->{'CustomSetting:bwamerge'} && exists $self->{"software:picard"}) {
@@ -1313,9 +1365,9 @@ sub runBWA($$) {
 			my $merge_bam=join " INPUT=",@{$self->{$lib}{"ref-bwabam"}};
 			$bwa_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
 			$bwa_cmd .= "\${samtools} index $lib.merge.bam\n";
-			$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort - $lib.merge.rmdup.sort\n";
+			$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
 			$bwa_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-			$bwa_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
+			$bwa_cmd .= "rm -rf ./tmp_merge $lib.merge.bam*\n" if (exists $self->{"CustomSetting:Clean"});
 			@{$self->{$lib}{"$ref-bwabam"}}=();
 			push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.merge.rmdup.sort.bam";
 		}
