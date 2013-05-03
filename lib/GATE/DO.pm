@@ -40,7 +40,7 @@ sub parseConfig($) {
 			$name=$1;
 			if ($name eq "LIB")
 			{
-				($index,$lib,$mergepe)=("","","");
+				($index,$barcode,$lib,$mergepe)=("","","","");
 				delete @RG{keys %RG};
 				%RG=();
 			}
@@ -259,7 +259,6 @@ sub selectIdxFastq ($) {
 					for (my $k=0;$k<@fq3;$k++){
 						my $reads1=$fq3[$k];
 						if (exists $self->{$lib}{$lbmark}{$k}{"Index"} && $self->{$lib}{$lbmark}{$k}{"Index"} ne "") {
-							#my $index=$self->{$lib}{$lbmark}{$k}{"Index"};
 							my $index=$self->{$lib}{$lbmark}{$k}{"Index"} if (exists $self->{$lib}{$lbmark}{$k}{"Index"});
 							my $barcode=$self->{$lib}{$lbmark}{$k}{"Barcode"} if (exists $self->{$lib}{$lbmark}{$k}{"Barcode"});
 							my $out1=(split /\//,$reads1)[-1];
