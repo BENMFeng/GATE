@@ -172,7 +172,7 @@ sub selectIdxFastq ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
 		next if (!exists $self->{'idx'}{$lib} && !exists $self->{'bar'}{$lib});
-		$Idx_cmd_multi.=$Idx_cmd_multi_head;
+		$Idx_cmd_multi .= $Idx_cmd_multi_head;
 		$Idx_cmd .= qq(echo `date`; echo "$lib"\n);
 		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$Idx_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
@@ -258,7 +258,8 @@ sub selectIdxFastq ($) {
 				{
 					for (my $k=0;$k<@fq3;$k++){
 						my $reads1=$fq3[$k];
-						if (exists $self->{$lib}{$lbmark}{$k}{"Index"} && $self->{$lib}{$lbmark}{$k}{"Index"} ne "") {
+						if ( (exists $self->{$lib}{$lbmark}{$k}{"Index"} && $self->{$lib}{$lbmark}{$k}{"Index"} ne "") ||
+						    (exists $self->{$lib}{$lbmark}{$k}{"Barcode"} && $self->{$lib}{$lbmark}{$k}{"Barcode"} ne "") ){
 							my $index=$self->{$lib}{$lbmark}{$k}{"Index"} if (exists $self->{$lib}{$lbmark}{$k}{"Index"});
 							my $barcode=$self->{$lib}{$lbmark}{$k}{"Barcode"} if (exists $self->{$lib}{$lbmark}{$k}{"Barcode"});
 							my $out1=(split /\//,$reads1)[-1];
