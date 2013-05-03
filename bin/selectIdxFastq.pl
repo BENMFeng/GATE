@@ -27,31 +27,10 @@ if (defined $Index && $Mismatch>0) {
 	my @COMB=combinatorialSelect($Mismatch,\@idx_idx);
 	$Idx{$Index}=1;
 	my @base=("A","C","G","T","N");
-	for (my $j=0;$j<@COMB;$j++) {;
-		my @var_loc=@{$COMB[$j]};
-		#print ((join "",@var_loc),"\n") if ($Debug);
-		for (my $k=0;$k<5**scalar(@var_loc);$k++)
-		{
-			my @tmp=@idx_ary;
-			my $m = $k % 5;
-			my $left=$k/5;
-			while ($left>=1) {
-				$m .= $left % 5;
-				$left = $left/5;
-			}
-			if (length($m)<$Mismatch) {
-				$m .= "0"x($Mismatch-length($m));
-			}
-			my @loc_idx=split "",$m;
-			#print ((join " ",@loc_idx),"\n") if ($Debug);
-			for (my $i=0;$i<@loc_idx;$i++)
-			{
-				$tmp[$var_loc[$i]]=$base[$loc_idx[$i]];
-			}
-			my $idx_p=join "",@tmp;
-			print "$idx_p\n" if ($Debug);
-			$Idx{$idx_p}=1;
-		}
+	my @mismatrix=dragball(\@idx_ary,\@COMB,\@base,$Mismatch);
+	foreach my $misary(@mismatrix)
+	{
+		$Idx{join "",@$misary}=1;
 	}
 } elsif ($Mismatch==0) {
 	$Idx{$Index}=1;
@@ -134,6 +113,15 @@ while(<IN1>)
 	if (defined $Reads2 && $Reads2 ne "")
 	{
 		$_=<IN2>;
+		if (/\:([ACGTN]{$Index_len})/) {
+			my $reads_idx=$1;
+			$StatHash{'Idx'}{$reads_idx}++ if (defined $Stat);
+			if (exists $Idx{$reads_idx}) {
+				$withIdx=1;
+			} else {
+				$withIdx=0;
+			}
+		}
 		my $out2=$_;
 		$_=<IN2>;
 		if (defined $Bar2 && $Bar2 ne "")
@@ -192,9 +180,7 @@ if (defined $Stat)
 		}
 	}
 	print ST "\n";
-	print ST "Total Reads: $totalReads";
-	print ST " + $totalReads" if (exists $StatHash{'sel'}{'R2'});
-	print ST "\n";
+	print ST "Total Reads: $totalReads\n";
 	print ST qq(R1 selected reads: $StatHash{'sel'}{'R1'}\n) if (exists $StatHash{'sel'}{'R1'});
 	print ST qq(R2 selected reads: $StatHash{'sel'}{'R2'}\n) if (exists $StatHash{'sel'}{'R2'});
 	close ST;
@@ -280,6 +266,38 @@ sub Back_vernier
 		}
 		$pre=$$array_p[$i];
 	}
+}
+
+sub dragball {
+	my ($box,$COMB,$ball,$lucknum)=@_;
+	my @dragonball=();
+	my $ball_num=scalar(@$ball);
+	for (my $j=0;$j<@$COMB;$j++) {;
+		my @var_loc=@{$COMB->[$j]};
+		#print ((join "",@var_loc),"\n") if ($Debug);
+		for (my $k=0;$k<$ball_num**scalar(@var_loc);$k++) {
+			my @tmp=@$box;
+			my $m = $k % $ball_num;
+			my $left=$k / $ball_num;
+			while ($left>=1) {
+				$m .= $left % $ball_num;
+				$left = $left/$ball_num;
+			}
+			if (length($m)<$lucknum) {
+				$m .= "0"x($lucknum-length($m));
+			}
+			my @loc_idx=split "",$m;
+			#print ((join " ",@loc_idx),"\n") if ($Debug);
+			for (my $i=0;$i<@loc_idx;$i++)
+			{
+				$tmp[$var_loc[$i]]=$ball->[$loc_idx[$i]];
+			}
+			push @dragonball,[@tmp];
+			print ((join "",@tmp),"\n") if ($Debug);
+			#$Idx{$idx_p}=1;
+		}
+	}
+	return @dragonball;
 }
 
 __END__
