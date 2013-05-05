@@ -2582,6 +2582,10 @@ sub runVelvetOases ($) {
 	return $velvet_cmd;
 }
 
+sub shuffleSequences ($) {
+	
+}
+
 sub runABySS ($) {
 	my $self=shift;
 }
@@ -2622,14 +2626,16 @@ sub runSOAPdenovo ($) {
 	} else {
 		my @libraries=sort keys %{$self->{'LIB'}};
 		foreach my $lib(@libraries) {
-			my %read=getlibSeq($self->{"LIB"}{$lib});
-			for (my $i=0;$i<@{$read{0}};$i++)
-			{
-				
-			}
+			my $config=$self->make_config("program","SOAPdenovo","outdir",qq($self->{"-workdir"}/$soapdenovo),"lib",$lib);
+			$soapdenovo_cmd .= qq(\${soapdenvo} \${soapdenvo_para}} -s $config -o $lib\n);
+			$self->{"denovo_genomics"}=qq($self->{"-workdir"}/soapdenvo/$lib.scafSeq);
 		}
 	}
 	return $soapdenovo_cmd;
+}
+
+sub make_config {
+	my ($self,%attrs)=@_;
 }
 
 sub runPhrap ($) {
