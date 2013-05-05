@@ -36,7 +36,7 @@ Bioinformatics Stargate
 
 Author: BENM <binxiaofeng@gmail.com>
 
-Version: v0.1.6 nightly, Apr 1st, 2013
+Version: v0.1.7 nightly, May 6th, 2013
 
 =head1 Option
 
@@ -54,7 +54,7 @@ Version: v0.1.6 nightly, Apr 1st, 2013
 
     qc			data processing & quality control
     denovo		de novo assembly
-    *predict		repeat masking and gene prediction
+    predict		repeat masking and gene prediction
     aln			alignment
     exp			quantitative analysis
     diff		differential expression anaylsis
@@ -264,7 +264,7 @@ my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
 qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
 edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
 );
-my @cmd_ary = qw(qc aln var exp diff as plot denovo phylogen);
+my @cmd_ary = qw(qc aln var exp diff as plot denovo predict phylogen);
 
 # make jobs submit shell scripts
 #my %custom_cmd = ();

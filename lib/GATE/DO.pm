@@ -21,10 +21,12 @@ use strict;
 use vars qw($VERSION);
 $VERSION = "0.9h,05-05-2013";
 package GATE::Element;
+#package GATE::Extension;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
 use File::Basename qw(basename dirname);
 use Cwd;
+
 
 sub parseConfig($) {
 	my $self = shift;
@@ -1524,7 +1526,7 @@ sub runBWA($$) {
 
 
 
-sub runbowtie($$) {
+sub runBowtie($$) {
 	my ($self,$ref) = @_;
 	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"}) {
 		return "";
@@ -2458,16 +2460,46 @@ sub runTrinity($) {
 						push @{$read{0}},@{$read{2}}[@{$read{2}}..(@{$read{1}}-1)];
 					}
 				}
+				my $single;
+				if (exists $read{0}) {
+					$single=join " ",@{$read{0}}[0..(@{$read{0}}-1)];
+				}
 				if (defined $reads1 && defined $reads2)
 				{
 					$trinity_cmd .= qq(cat $reads1 > reads_1.fq && cat $reads2 > reads_2.fq\n);
-					$trinity_cmd .= qq($trinity --left reads_1.fq --right reads_2.fq $para\n);
-					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie\n);
+					if (defined $single)
+					{
+						if (@{$read{0}}>1) {
+							$trinity_cmd .= qq(cat $single > single_reads.fq\n);
+							$single = "single_reads.fq";
+						}
+					}
+					$trinity_cmd .= qq($trinity --left reads_1.fq --right reads_2.fq $para);
+					$trinity_cmd .= qq( --single $single);
+					$trinity_cmd .= qq(\n);
+					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie);
+					$trinity_cmd .= qq( --single $single);
+					$trinity_cmd .= qq(\n);
 					$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --paired\n);
 				}
 			} else {
-				$trinity_cmd .= qq($trinity --left ${$read{1}}[0] --right ${$read{2}}[0] $para\n);
-				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie\n);
+				my $single;
+				if (exists $read{0}) {
+					$single=join " ",@{$read{0}}[0..(@{$read{0}}-1)];
+				}
+				if (defined $single)
+				{
+					if (@{$read{0}}>1) {
+						$trinity_cmd .= qq(cat $single > single_reads.fq\n);
+						$single = "single_reads.fq";
+					}
+				}
+				$trinity_cmd .= qq($trinity --left ${$read{1}}[0] --right ${$read{2}}[0] $para);
+				$trinity_cmd .= qq( --single $single);
+				$trinity_cmd .= qq(\n);
+				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --left reads_1.fq --right reads_2.fq --seqType fq --target Trinity.fasta --aligner bowtie);
+				$trinity_cmd .= qq( --single $single);
+				$trinity_cmd .= qq(\n);
 				$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --paired\n);
 			}
 		} elsif (exists $read{1}) {
@@ -2478,12 +2510,12 @@ sub runTrinity($) {
 			$trinity_cmd .= qq($trinity --single ${$read{1}}[2] $para\n);
 			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{2}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
 			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam--SS_lib_type F --thread_count 8\n);
-		}
-		if (exists $read{0}) {
+		} elsif (exists $read{0}) {
 			$trinity_cmd .= qq($trinity --single ${$read{0}}[0] $para\n);
 			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{0}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
 			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --SS_lib_type F --thread_count 8\n);
 		}
+		$self->{"LIB"}{$lib}{'INPUT'}{'denovo'}=qq($self->{"-workdir"}/$lib/Trinity.fasta);
 	}
 	return $trinity_cmd;
 }
@@ -2506,8 +2538,10 @@ sub runVelvet ($) {
 		$velvetg=~s/velveth$/velvetg/;
 		$velvet_cmd .= qq(export velveg="$velvetg"\n);
 	}
+	my $velvethpara = $self->{'CustomSetting:velveth'};
+	$velvet_cmd .= qq(export velvethpara="$velvethpara"\n);
 	my $velvetgpara = $self->{'CustomSetting:velvetg'};
-	$velvet_cmd .= qq(export velvegpara="$velvetgpara"\n);
+	$velvet_cmd .= qq(export velvetgpara="$velvetgpara"\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
 	$velvet_cmd .= qq(mkdir velvet\n);
@@ -2516,21 +2550,24 @@ sub runVelvet ($) {
 		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
 		$velvet_cmd .= qq(cd $lib\n);
 		my %read=getlibSeq($self->{"LIB"}{$lib});
-		if (exists $read{1} && exists $read{2}) {
-			if (@{$read{1}}>1 && @{$read{2}}>1){
-				
-			} else {
-				
+		my $input="";
+		for (my $i=0;$i<@{$read{0}};$i++)
+		{
+			$input.="-short --".$self->check_fileformat(${$read{0}}[$i])." ${$read{0}}[$i]";
+		}
+		if (exists $read{1} && exists $read{2} && @{$read{2}}==@{$read{1}}) {
+			for (my $i=0;$i<@{$read{2}};$i++) {
+				my $reads1=${$read{1}}[$i];
+				my $reads2=${$read{2}}[$i];
+				my $format=$self->check_fileformat($reads1);
+				my $reads=shuffleSequences($reads1,$reads2,$format);
+				$input.="-shortPaired --".$self->check_fileformat($reads)." $reads";
 			}
-		} elsif (exists $read{1}) {
-
-		} elsif (exists $read{2}) {
-			
 		}
-		if (exists $read{0}) {
-			
-		}
+		$velvet_cmd .= qq(\${velveth} $lib\_velvet \${velvethpara} $input\n);
+		$velvet_cmd .= qq(\${velvetg} $lib\_velvet \${velveghpara}\n);
 	}
+	return $velvet_cmd;
 }
 
 sub runOases ($) {
@@ -2835,6 +2872,9 @@ sub runCisGenome ($) {
 #                                                       #
 #########################################################
 
+#gth -showintronmaxlen 6000 -gcmaxgapwidth 6000 -o MW_v2c.gth.xml -xmlout -maskpolyatails -paralogs \
+#-genomic ../../00.db/MW_v2c.fasta -cdna ../../00.db/cassava_cdna.fa \
+#-protein ../../00.db/Euphorbiaceae_protein_sequence.fasta > 1.log 2> 2.log
 sub runGenomeThreader ($) {
 	my $self=shift;
 	if (!exists $self->{"software:gth"} || !-e $self->{"software:gth"})
@@ -2845,7 +2885,12 @@ sub runGenomeThreader ($) {
 	my $gth_cmd = qq(echo `date`; echo "run GenomeThreader"\n);
 	$gth_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$gth_cmd .= qq(export gth="$gth"\n);
-	my $genomic=$self->{"database:denovo"};
+	my $denovo_genomics="";
+	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
+	if (!defined $denovo_genomics) {
+		$gth_cmd .= $self->runTrinity();
+		$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
+	}
 	my $cdna=$self->{"database:cdna"} if (exists $self->{"database:cdna"});
 	$gth_cmd .= qq(export cdna="$cdna"\n);
 	my $protein=$self->{"database:protein"} if (exists $self->{"database:protein"});
@@ -2853,39 +2898,86 @@ sub runGenomeThreader ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$gth_cmd .= qq(cd $self->{"-workdir"}\n);
 	$gth_cmd .= qq(mkdir gth\n) unless (-d qq($self->{"-workdir"}/gth));
+	my $k=0;
 	foreach my $lib(@libraries) {
 		$gth_cmd .= qq(echo `date`; echo "$lib"\n);
 		$gth_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
 		$gth_cmd .= qq(cd $lib\n);
-		my $genomic;
 		if (exists $self->{"LIB"}{$lib}{'INPUT'}{'denovo'}) {
-			$genomic = $self->{"LIB"}{$lib}{'INPUT'}{'denovo'};
+			$denovo_genomics = $self->{"LIB"}{$lib}{'INPUT'}{'denovo'};
 		}
 		elsif (exists $self->{"LIB"}{"$lib"}{'denovo'}) {
-			$genomic = ${$self->{"LIB"}{$lib}{'denovo'}}[0];
+			$denovo_genomics = ${$self->{"LIB"}{$lib}{'denovo'}}[0];
 		}
 		elsif (exists $self->{"LIB"}{"$lib"}{'fa'}) {
-			$genomic = ${$self->{"LIB"}{$lib}{'fa'}}[0];
+			$denovo_genomics = ${$self->{"LIB"}{$lib}{'fa'}}[0];
+		} else {
+			$k++;
+			next;
 		}
-		$gth_cmd .= qq(cd $self->{"-workdir"}\n);
-		$gth_cmd .= qq(cd gth\n);
 		$gth_cmd .= qq(\${gth} -showintronmaxlen 6000 -gcmaxgapwidth 6000 -o gth.out.xml -xmlout -maskpolyatails -paralogs \\\n);
-		$gth_cmd .= qq(-genomic $genomic\\\n);
+		$gth_cmd .= qq(-genomic $denovo_genomics\\\n);
+		$gth_cmd .= qq(-cdns \${cdna}\\\n) if (defined $cdna);
+		$gth_cmd .= qq(-protein \${protein}\\\n) if (defined $protein);
+		$gth_cmd .= qq( > gth.log 2>&1\n);
+		$gth_cmd .= qq(cd ../\n);
+	}
+	if ($k==@libraries) {
+		$gth_cmd .= qq(\${gth} -showintronmaxlen 6000 -gcmaxgapwidth 6000 -o gth.out.xml -xmlout -maskpolyatails -paralogs \\\n);
+		$gth_cmd .= qq(-genomic $denovo_genomics\\\n);
 		$gth_cmd .= qq(-cdns \${cdna}\\\n) if (defined $cdna);
 		$gth_cmd .= qq(-protein \${protein}\\\n) if (defined $protein);
 		$gth_cmd .= qq( > gth.log 2>&1\n);
 		$gth_cmd .= qq(cd ../\n);
 	}
 	return $gth_cmd;
-#gth -showintronmaxlen 6000 -gcmaxgapwidth 6000 -o MW_v2c.gth.xml -xmlout -maskpolyatails -paralogs \
-#-genomic ../../00.db/MW_v2c.fasta -cdna ../../00.db/cassava_cdna.fa \
-#-protein ../../00.db/Euphorbiaceae_protein_sequence.fasta > 1.log 2> 2.log
+
 }
 
+#gm_es.pl denovo_genomics.fa
 sub runGeneMark ($) {
 	my $self=shift;
-	my $gth=checkPath($self->{"software:gth"});
-	#gm_es.pl denovo_genomics.fa
+	if (!exists $self->{"software:gm"} || !-e $self->{"software:gm"})
+	{
+		return "";
+	}
+	my $gm=checkPath($self->{"software:gm"});
+	my $gm_cmd = qq(echo `date`; echo "run GeneMark"\n);
+	$gm_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$gm_cmd .= qq(export gm="$gm"\n);
+	my $denovo_genomics="";
+	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
+	$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
+	if (!defined $denovo_genomics) {
+		$gm_cmd .= $self->runTrinity();
+		$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
+	}
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $k=0;
+	foreach my $lib(@libraries) {
+		$gm_cmd .= qq(echo `date`; echo "$lib"\n);
+		$gm_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
+		$gm_cmd .= qq(cd $lib\n);
+		if (exists $self->{"LIB"}{$lib}{'INPUT'}{'denovo'}) {
+			$denovo_genomics = $self->{"LIB"}{$lib}{'INPUT'}{'denovo'};
+		}
+		elsif (exists $self->{"LIB"}{"$lib"}{'denovo'}) {
+			$denovo_genomics = ${$self->{"LIB"}{$lib}{'denovo'}}[0];
+		}
+		elsif (exists $self->{"LIB"}{"$lib"}{'fa'}) {
+			$denovo_genomics = ${$self->{"LIB"}{$lib}{'fa'}}[0];
+		} else {
+			$k++;
+			next;
+		}
+		$gm_cmd .= qq(\{gm} $denovo_genomics\n);
+	}
+	if ($k==@libraries) {
+		$gm_cmd .= qq(\{gm} $denovo_genomics\n);
+	}
+	if (defined $denovo_genomics) {
+		return $gm_cmd;
+	}
 }
 
 sub runAUGUSTUS ($) {

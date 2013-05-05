@@ -100,6 +100,7 @@ sub denovo($) {
 
 sub predict($) {
 	my $self=shift;
+	$self->runGenomeThreader().$self->runGeneMark();
 }
 
 sub phylgen($) {

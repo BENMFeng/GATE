@@ -16,8 +16,8 @@ use lib "$FindBin::Bin/../lib";
 use File::Basename qw(basename dirname);
 use GATE::Element;
 #use GATE::Extension;
-
 @ISA = qw(GATE::Element GATE::DO);
+#@ISA = qw(GATE::Element GATE::Extension GATE::DO);
 
 
 $VERSION = "1.2a";
