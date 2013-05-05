@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9g,05-02-2013";
+$VERSION = "0.9h,05-05-2013";
 package GATE::Element;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
@@ -1021,8 +1021,8 @@ sub runRNASeqQC ($) {
 	my $para=$self->{'CustomSetting:RNA-SeQC'};
 	
 	my $rnaseqqc_cmd = qq(echo `date`; echo "run RNA-SeQC"\n);
-	$rnaseqqc_cmd .= qq(cd $self->{"-workdir"}\n);
 	$rnaseqqc_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$rnaseqqc_cmd .= qq(cd $self->{"-workdir"}\n);
 	$rnaseqqc_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	unless (exists $self->{'cmd'}{'aln'} && $self->{'cmd'}{'aln'}==0) {
 		$rnaseqqc_cmd .= $self->runBWA("ref");
@@ -1046,12 +1046,115 @@ sub runRNASeqQC ($) {
 	return ($rnaseqqc_cmd);
 }
 
-sub runSEECR($) {
-	
+sub runSEECER($) {
+#Invalid option: --
+#   # This script runs the SEECER pipeline of 4 steps:
+#   #
+#   # 1. Replace Ns and strip off read IDs (to save memory).
+#   # 2. Run JELLYFISH to count kmers.
+#   # 3. Correct errors with SEECER.
+#   # 4. Clean up and put back original read IDs.
+#   
+#   run_seecer.sh [options] read1 read2
+#
+#   read1, read2: are Fasta/Fastaq files.
+#	  If only read1 is provided, the reads are considered singles.
+#          Otherwise, read1 and read2 are paired-end reads.
+#
+#   Options:
+#      -t <v> : *required* specify a temporary working directory.
+#      -k <v> : specify a different K value (default = 17).
+#      -j <v> : specify the location of JELLYFISH binary (default = ../jellyfish-1.1.4/bin/jellyfish).
+#      -p <v> : specify extra SEECER parameters (default = '').
+#      -s <v> : specify the starting step ( default = 1). Values = 1,2,3,4.
+#      -h : help message
+	my $self = shift;
+	if (!exists $self->{"software:SEECER"} || !defined $self->{"software:SEECER"} || !exists $self->{"software:JELLYFISH"}){
+		return "";
+	}
+	my $seecer = $self->{"software:SEECER"};
+	my $jellyfish = $self->{"software:JELLYFISH"};
+	my $seecerpara = $self->{"CustomSetting:SEECER"};
+	my $seecer_cmd = qq(echo `date`; echo "run SEECER"\n);;
+	$seecer_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$seecer_cmd .= qq(export seecer=$seecer\n);
+	$seecer_cmd .= qq(export jellyfish=$jellyfish\n);
+	$seecer_cmd .= qq(export seecerpara="$seecerpara"\n);
+	$seecer_cmd .= qq(cd $self->{"-workdir"}\n);
+	$seecer_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$seecer_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		$seecer_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$seecer_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $fq{1} && exists $fq{2}){
+			for (my $i=0;$i<@{$fq{2}};$i++) {
+				my $fq1=${$fq{1}}[$i];
+				my $fq2=${$fq{2}}[$i];
+				$seecer_cmd .= qq(\${seecer} \${seecerpara} $fq1 $fq2\n);
+			}
+		}
+		if (exists $fq{0} && @{$fq{0}}>0){
+			for (my $i=0;$i<@{$fq{0}};$i++) {
+				my $fq=${$fq{0}}[$i];
+				$seecer_cmd .= qq(\${seecer} \${seecerpara} $fq\n);
+			}
+		}
+		$seecer_cmd .= "cd ..\n";
+	}
+	return $seecer_cmd;
 }
 
 sub runCRAC($) {
-	
+	my $self = shift;
+	my $ref = shift;
+	$ref ||= "ref";
+	if (!exists $self->{"software:crac"} || !defined $self->{"software:crac"}){
+		return "";
+	}
+	my $crac = $self->{"software:crac"};
+	my $cracpara = $self->{"CustomSetting:crac"};
+	$cracpara .= qq( -k 22 \n) if ($cracpara!~/\-k/);
+	my $reference=checkPath($self->{"database:$ref"});
+	my $crac_cmd = qq(echo `date`; echo "run CRAC"\n);;
+	$crac_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$crac_cmd .= qq(export REFERENCE="$reference"\n);
+	$crac_cmd .= qq(export crac=$crac\n);
+	$crac_cmd .= qq(export seecerpara="$cracpara"\n);
+	$crac_cmd .= qq(cd $self->{"-workdir"}\n);
+	$crac_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$crac_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		$crac_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$crac_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $fq{1} && exists $fq{2}){
+			for (my $i=0;$i<@{$fq{2}};$i++) {
+				my $fq1=${$fq{1}}[$i];
+				my $fq2=${$fq{2}}[$i];
+				my $bam=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".sam":"$lib.pair.bam";
+				my $chimera=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".chimera":"$lib.pair.chimera";
+				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq1 $fq2 -o $bam );
+				$crac_cmd .= qq( --paired-end-chimera $chimera ) if ($cracpara=~/chimera/);
+				$crac_cmd .= qq(--nb-threads $self->{'CustomSetting:multithreads'}) if (exists $self->{'CustomSetting:multithreads'});
+				$crac_cmd .= qq(\n);
+			}
+		}
+		if (exists $fq{0} && @{$fq{0}}>0){
+			for (my $i=0;$i<@{$fq{0}};$i++) {
+				my $fq=${$fq{0}}[$i];
+				my $bam=(@{$fq{0}}>1)?"$lib.single.".($i+1).".sam":"$lib.single.bam";
+				my $chimera=(@{$fq{0}}>1)?"$lib.single.".($i+1).".chimera":"$lib.single.chimera";
+				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq -o $bam );
+				$crac_cmd .= qq( --chimera $chimera ) if ($cracpara=~/chimera/);
+				$crac_cmd .= qq(\n);
+			}
+		}
+		$crac_cmd .= "cd ..\n";
+	}
+	return $crac_cmd;
 }
 
 sub runBEDtools ($) {
