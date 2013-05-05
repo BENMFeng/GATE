@@ -2515,15 +2515,15 @@ sub runTrinity($) {
 			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/alignReads.pl --single ${$read{0}}[0] --seqType fq --target Trinity.fasta --aligner bowtie\n);
 			$trinity_cmd .= qq(\${TRINITY_RNASEQ_ROOT}/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out/bowtie_out.nameSorted.bam --SS_lib_type F --thread_count 8\n);
 		}
-		$self->{"LIB"}{$lib}{'INPUT'}{'denovo'}=qq($self->{"-workdir"}/$lib/Trinity.fasta);
+		push @{$self->{"LIB"}{$lib}{'INPUT'}{'denovo'}},qq($self->{"-workdir"}/trinity_asm/$lib/Trinity.fasta);
 	}
 	return $trinity_cmd;
 }
 
-sub runVelvet ($) {
+sub runVelvetOases ($) {
 	my $self=shift;
 	my $velveth=checkPath($self->{"software:velveth"});
-	my $velvet_cmd = qq(echo `date`; echo "run Velvet"\n);
+	my $velvet_cmd = qq(echo `date`; echo "run Velvet-Oases"\n);
 	$velvet_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$velvet_cmd .= qq(export velvet="$velveth"\n);
 	my $velvetg="";
@@ -2538,10 +2538,14 @@ sub runVelvet ($) {
 		$velvetg=~s/velveth$/velvetg/;
 		$velvet_cmd .= qq(export velveg="$velvetg"\n);
 	}
+	my $oases=checkPath($self->{"software:oascs"}) if (exists $self->{"software:oascs"});
+	$velvet_cmd .= qq(export oases="$oases"\n) if (defined $oases);
 	my $velvethpara = $self->{'CustomSetting:velveth'};
 	$velvet_cmd .= qq(export velvethpara="$velvethpara"\n);
 	my $velvetgpara = $self->{'CustomSetting:velvetg'};
 	$velvet_cmd .= qq(export velvetgpara="$velvetgpara"\n);
+	my $oasespara = $self->{'CustomSetting:oases'} if (exists $self->{'CustomSetting:oases'});
+	$velvet_cmd .= qq(export oasespara="$oasespara"\n) if (defined $oasespara);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
 	$velvet_cmd .= qq(mkdir velvet\n);
@@ -2551,9 +2555,10 @@ sub runVelvet ($) {
 		$velvet_cmd .= qq(cd $lib\n);
 		my %read=getlibSeq($self->{"LIB"}{$lib});
 		my $input="";
-		for (my $i=0;$i<@{$read{0}};$i++)
-		{
-			$input.="-short --".$self->check_fileformat(${$read{0}}[$i])." ${$read{0}}[$i]";
+		if (exists $read{0}) {
+			for (my $i=0;$i<@{$read{0}};$i++) {
+				$input.="-short --".$self->check_fileformat(${$read{0}}[$i])." ${$read{0}}[$i]";
+			}
 		}
 		if (exists $read{1} && exists $read{2} && @{$read{2}}==@{$read{1}}) {
 			for (my $i=0;$i<@{$read{2}};$i++) {
@@ -2564,19 +2569,17 @@ sub runVelvet ($) {
 				$input.="-shortPaired --".$self->check_fileformat($reads)." $reads";
 			}
 		}
-		$velvet_cmd .= qq(\${velveth} $lib\_velvet \${velvethpara} $input\n);
-		$velvet_cmd .= qq(\${velvetg} $lib\_velvet \${velveghpara}\n);
+		$velvet_cmd .= qq(\${velveth} $lib \${velvethpara} $input\n);
+		$velvet_cmd .= qq(\${velvetg} $lib \${velveghpara}\n);
+		if (defined $oases)
+		{
+			$velvet_cmd .= qq(\${oases} $lib \${oasespara}\n) ;
+			push @{$self->{"LIB"}{$lib}{'INPUT'}{'denovo'}},qq($self->{"-workdir"}/velvet/$lib/transcripts.fa);
+		} else {
+			push @{$self->{"LIB"}{$lib}{'INPUT'}{'denovo'}},qq($self->{"-workdir"}/velvet/$lib/contigs.fa);
+		}
 	}
 	return $velvet_cmd;
-}
-
-sub runOases ($) {
-	my $self=shift;
-	my $oases=checkPath($self->{"software:oascs"});
-	my $oases_cmd = "";
-	$oases_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$oases_cmd .= qq(export oascs="$oases"\n);
-
 }
 
 sub runABySS ($) {
@@ -2587,17 +2590,46 @@ sub runTransABySS ($) {
 	my $self=shift;
 }
 
+#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
 sub runSOAPdenovo ($) {
 	my $self=shift;
 	if (!exists $self->{"software:soapdenovo"})
 	{
 		return "";
 	}
-	my $soapdenovo=checkPath($self->{"software:soapdenovo"});
-	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"});
+	my $soapdenovo=checkPath($self->{"software:soapdenovo"}) if (exists $self->{"software:soapdenovo"});
+	my $soapdenovo_cmd=qq(echo `date`; echo "run SOAPdenvo|SOAPdenovo-Trans"\n);
+	$soapdenovo_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$soapdenovo_cmd .= qq(export soapdenvo="$soapdenovo"\n);
+	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"}) if (exists $self->{"CustomSetting:soapdenovo_config"});
 	my $para=$self->{"CustomSetting:soapdenovo"};
-	
-	#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
+	$soapdenovo_cmd .= qq(export soapdenvo_para="$para"\n);
+	$config=$1 if ($para=~/\-s\s+(\S+)/);
+	$soapdenovo_cmd .= qq(cd $self->{"-workdir"}\n);
+	$soapdenovo_cmd .= qq(mkdir soapdenvo\n);
+	if (defined $config) {
+		$soapdenovo_cmd .= qq(\${soapdenvo} \${soapdenvo_para}});
+		$soapdenovo_cmd .= qq( -s $config) if ($para !~/\-s/);
+		$soapdenovo_cmd .= "\n";
+		my $prefix = "";
+		if ($para=~/\-o\s+(\S+)/) {
+			$prefix = $1;
+		}
+		else {
+			$prefix = "soapdenovo";
+		}
+		$self->{"denovo_genomics"}=qq($self->{"-workdir"}/soapdenvo/$prefix.scafSeq);
+	} else {
+		my @libraries=sort keys %{$self->{'LIB'}};
+		foreach my $lib(@libraries) {
+			my %read=getlibSeq($self->{"LIB"}{$lib});
+			for (my $i=0;$i<@{$read{0}};$i++)
+			{
+				
+			}
+		}
+	}
+	return $soapdenovo_cmd;
 }
 
 sub runPhrap ($) {
