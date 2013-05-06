@@ -1474,7 +1474,11 @@ sub runBWA($$) {
 			$bwa_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
 			$bwa_cmd .= "rm -rf ./tmp_merge $lib.merge.bam*\n" if (exists $self->{"CustomSetting:Clean"});
 			@{$self->{$lib}{"$ref-bwabam"}}=();
-			push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.merge.rmdup.sort.bam";
+			my $bam=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.merge.rmdup.sort.bam";
+			push @{$self->{$lib}{"$ref-bwabam"}},$bam;
+			if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
+				$bwa_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
+			}
 		}
 		if (exists $self->{'CustomSetting:UnmappedRealign'})
 		{
@@ -1797,6 +1801,18 @@ sub runTopHat($) {
 	}
 	$tophat_cmd .= "cd ..\n";
 	return ($tophat_cmd);
+}
+
+sub runGSNAP ($) {
+	
+}
+
+sub runGMAP ($) {
+	
+}
+
+sub runSTAR ($) {
+	
 }
 
 sub runBLAST ($) {
@@ -2212,6 +2228,9 @@ sub callVar ($$) {
 			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
 			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+		}
+		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
+			$callVar_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
 		}
 		$multi++;
 		$callVar_cmd  =~ s/\&*\s*$//;
@@ -2897,7 +2916,10 @@ sub runMACS ($) {
 			}
 		}
 	}
+}
 
+sub runRUM ($) {
+	
 }
 
 sub runCisGenome ($) {

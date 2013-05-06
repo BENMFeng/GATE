@@ -116,11 +116,7 @@ while(<IN1>)
 		if (/\:([ACGTN]{$Index_len})/) {
 			my $reads_idx=$1;
 			$StatHash{'Idx'}{$reads_idx}++ if (defined $Stat);
-			if (exists $Idx{$reads_idx}) {
-				$withIdx=1;
-			} else {
-				$withIdx=0;
-			}
+			$withIdx=1 if (exists $Idx{$reads_idx});
 		}
 		my $out2=$_;
 		$_=<IN2>;
