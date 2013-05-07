@@ -1837,7 +1837,7 @@ sub runLASTZ($) {
 #                                                       #
 #########################################################
 
-sub callVar ($$) {
+sub callGATK ($$) {
 	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
@@ -2312,6 +2312,27 @@ sub runCufflinks($) {
 	return ($cufflinks_cmd);
 }
 
+#soapsnp -B aln.bam -d reference.fa -o cns -r 0.0005 -e 0.001 -u -L 150 -2 -Q J -s dbSNP -T region.out -m
+#The dbSNP file consist of a lot of lines like this one:
+#		chr1    201979756       1       1       0       0.161   0       0       0.839   rs568
+#	The columns from left to right are: name of chromosome, coordinate on the chromosome, whether 
+#	the SNP	has allele frequency information (1 is true, 0 is false), whether the SNP is validated 
+#	by experiment (1 is true, 0 is false), whether the SNP is actually an indel (1 is true, 0 is false),
+#	frequency of A, frequency of C, frequency of T, frequency of G, SNP id. For known SNP sites that do
+#	not have allele frequency information, the frequency information can be arbitrarily determined as 
+#	any positive values, which only imply what alleles have already been deposited in the database.
+sub runSOAPsnp($) {
+	
+}
+
+sub runSOAPsnv ($) {
+	
+}
+
+sub runSOAPsv ($) {
+	
+}
+
 sub runCuffMerge($) {
 	my $self=shift;
 	my $ref=shift;
@@ -2643,6 +2664,7 @@ sub runSOAPdenovo ($) {
 		}
 		$self->{"denovo_genomics"}=qq($self->{"-workdir"}/soapdenvo/$prefix.scafSeq);
 	} else {
+		print STDERR "no SOAPdenovo.config file found!\n";
 		my @libraries=sort keys %{$self->{'LIB'}};
 		foreach my $lib(@libraries) {
 			my $config=$self->make_config("program","SOAPdenovo","outdir",qq($self->{"-workdir"}/$soapdenovo),"lib",$lib);

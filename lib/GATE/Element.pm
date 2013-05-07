@@ -70,7 +70,7 @@ sub aln($) {
 
 sub var($) {
 	my $self=shift;
-	$self->callVar();
+	$self->callGATK();
 }
 
 sub exp($) {

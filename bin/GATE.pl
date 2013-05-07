@@ -59,7 +59,7 @@ Version: v0.1.7 nightly, May 6th, 2013
     exp			quantitative analysis
     diff		differential expression anaylsis
     as			alternative splicing analysis
-    var			genomic variation/polymorism analysis
+    var			genomic variation/polymorism analysis, inculding SNV/SNP, INDEL, SV
     *peak		find peak for ChIP-Seq
     *edit		gene editing analysis
     *fusion		gene fusion analysis
