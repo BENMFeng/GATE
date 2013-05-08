@@ -60,7 +60,7 @@ sub new ($$;@) {
 
 sub qc($) {
 	my $self=shift;
-	$self->selectIdxFastq().$self->mergeOverlapPE().$self->runQA().$self->runFltDup().$self->runFltAP().$self->runRSeQC().$self->runRNASeqQC();
+	$self->selectIdxFastq().$self->mergeOverlapPE().$self->runQA().$self->runFltDup().$self->runFltAP().$self->runRSeQC().$self->runRNASeqQC().$self->runSEECER();
 }
 
 sub aln($) {
@@ -70,7 +70,7 @@ sub aln($) {
 
 sub var($) {
 	my $self=shift;
-	$self->callGATK();
+	$self->runGATK();
 }
 
 sub exp($) {
@@ -90,7 +90,7 @@ sub as($) {
 
 sub plot($) {
 	my $self=shift;
-	$self->GenePlot();
+	$self->runGenePlot();
 }
 
 sub denovo($) {
@@ -101,6 +101,11 @@ sub denovo($) {
 sub predict($) {
 	my $self=shift;
 	$self->runGenomeThreader().$self->runGeneMark();
+}
+
+sub fusion ($) {
+	my $self=shift;
+	$self->runCRAC();
 }
 
 sub phylgen($) {

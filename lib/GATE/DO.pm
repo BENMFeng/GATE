@@ -1101,58 +1101,6 @@ sub runSEECER($) {
 	return $seecer_cmd;
 }
 
-sub runCRAC($) {
-	my $self = shift;
-	my $ref = shift;
-	$ref ||= "ref";
-	if (!exists $self->{"software:crac"} || !defined $self->{"software:crac"}){
-		return "";
-	}
-	my $crac = $self->{"software:crac"};
-	my $cracpara = $self->{"CustomSetting:crac"};
-	$cracpara .= qq( -k 22 \n) if ($cracpara!~/\-k/);
-	my $reference=checkPath($self->{"database:$ref"});
-	my $crac_cmd = qq(echo `date`; echo "run CRAC"\n);;
-	$crac_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$crac_cmd .= qq(export REFERENCE="$reference"\n);
-	$crac_cmd .= qq(export crac=$crac\n);
-	$crac_cmd .= qq(export seecerpara="$cracpara"\n);
-	$crac_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
-	$crac_cmd .= qq(cd $self->{"-workdir"}\n);
-	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$crac_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
-	my @libraries=sort keys %{$self->{'LIB'}};
-	foreach my $lib(@libraries) {
-		$crac_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-		$crac_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
-		if (exists $fq{1} && exists $fq{2}){
-			for (my $i=0;$i<@{$fq{2}};$i++) {
-				my $fq1=${$fq{1}}[$i];
-				my $fq2=${$fq{2}}[$i];
-				my $bam=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".sam":"$lib.pair.bam";
-				my $chimera=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".chimera":"$lib.pair.chimera";
-				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq1 $fq2 -o $bam );
-				$crac_cmd .= qq( --paired-end-chimera $chimera ) if ($cracpara=~/chimera/);
-				$crac_cmd .= qq(--nb-threads $self->{'CustomSetting:multithreads'}) if (exists $self->{'CustomSetting:multithreads'});
-				$crac_cmd .= qq(\n);
-			}
-		}
-		if (exists $fq{0} && @{$fq{0}}>0){
-			for (my $i=0;$i<@{$fq{0}};$i++) {
-				my $fq=${$fq{0}}[$i];
-				my $bam=(@{$fq{0}}>1)?"$lib.single.".($i+1).".sam":"$lib.single.bam";
-				my $chimera=(@{$fq{0}}>1)?"$lib.single.".($i+1).".chimera":"$lib.single.chimera";
-				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq -o $bam );
-				$crac_cmd .= qq( --chimera $chimera ) if ($cracpara=~/chimera/);
-				$crac_cmd .= qq(\n);
-			}
-		}
-		$crac_cmd .= "cd ..\n";
-	}
-	return $crac_cmd;
-}
-
 sub runBEDtools ($) {
 	
 }
@@ -1831,7 +1779,7 @@ sub runLASTZ($) {
 #                                                       #
 #########################################################
 
-sub callGATK ($$) {
+sub runGATK ($$) {
 	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
@@ -2921,7 +2869,7 @@ sub runASAP ($) {
 	return ($runAS_cmd);
 }
 
-sub GenePlot ($) {
+sub runGenePlot ($) {
 	my $self = shift;
 	my $ref = shift;
 	my $gene = shift;
@@ -3156,6 +3104,58 @@ sub runTophatFusion ($) {
 
 sub runSOAPfusion ($) {
 	my $self = shift;
+}
+
+sub runCRAC($) {
+	my $self = shift;
+	my $ref = shift;
+	$ref ||= "ref";
+	if (!exists $self->{"software:crac"} || !defined $self->{"software:crac"}){
+		return "";
+	}
+	my $crac = $self->{"software:crac"};
+	my $cracpara = $self->{"CustomSetting:crac"};
+	$cracpara .= qq( -k 22 \n) if ($cracpara!~/\-k/);
+	my $reference=checkPath($self->{"database:$ref"});
+	my $crac_cmd = qq(echo `date`; echo "run CRAC"\n);;
+	$crac_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$crac_cmd .= qq(export REFERENCE="$reference"\n);
+	$crac_cmd .= qq(export crac=$crac\n);
+	$crac_cmd .= qq(export seecerpara="$cracpara"\n);
+	$crac_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
+	$crac_cmd .= qq(cd $self->{"-workdir"}\n);
+	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$crac_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		$crac_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$crac_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $fq{1} && exists $fq{2}){
+			for (my $i=0;$i<@{$fq{2}};$i++) {
+				my $fq1=${$fq{1}}[$i];
+				my $fq2=${$fq{2}}[$i];
+				my $bam=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".sam":"$lib.pair.bam";
+				my $chimera=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".chimera":"$lib.pair.chimera";
+				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq1 $fq2 -o $bam );
+				$crac_cmd .= qq( --paired-end-chimera $chimera ) if ($cracpara=~/chimera/);
+				$crac_cmd .= qq(--nb-threads $self->{'CustomSetting:multithreads'}) if (exists $self->{'CustomSetting:multithreads'});
+				$crac_cmd .= qq(\n);
+			}
+		}
+		if (exists $fq{0} && @{$fq{0}}>0){
+			for (my $i=0;$i<@{$fq{0}};$i++) {
+				my $fq=${$fq{0}}[$i];
+				my $bam=(@{$fq{0}}>1)?"$lib.single.".($i+1).".sam":"$lib.single.bam";
+				my $chimera=(@{$fq{0}}>1)?"$lib.single.".($i+1).".chimera":"$lib.single.chimera";
+				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq -o $bam );
+				$crac_cmd .= qq( --chimera $chimera ) if ($cracpara=~/chimera/);
+				$crac_cmd .= qq(\n);
+			}
+		}
+		$crac_cmd .= "cd ..\n";
+	}
+	return $crac_cmd;
 }
 
 #########################################################

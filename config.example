@@ -9,16 +9,26 @@ gencode-gc=/share/database/gencode.v7.gc.txt
 genelist=./gene_list.txt
 [software]
 SolexaQA=/usr/local/bin/SolexaQA.pl
-RNA-SeQC=java -jar ./software/RNA-SeQC/RNA-SeQC_v1.1.7.jar
+RNA-SeQC=/usr/local/biosoft/RNA-SeQC/RNA-SeQC_v1.1.7.jar
 bwa=/usr/local/bin/bwa
 samtools=/usr/local/bin/samtools
-picard=java -jar /usr/local/bin/picard-1.77.jar
-gatk=java -jar /usr/local/bin/GenomeAnalysisTK.jar
+picard=/usr/local/bin/picard-1.77.jar
+gatk=/usr/local/bin/GenomeAnalysisTK.jar
 bowtie=/usr/local/bin/bowtie2
 cufflinks=/usr/local/bin/cufflinks
 tophat=/usr/local/bin/tophat
-AlternativeSplicing=java -jar ./bin/AlternativeSplicing.jar
-SamToFastq=java -jar ./bin/SamToFastq.jar
+AlternativeSplicing=/usr/local/bin/AlternativeSplicing.jar
+SamToFastq=/usr/local/bin/SamToFastq.jar
+[CustomSetting]
+bwaaln=-t 14 -n 2 -q 10
+tophat=--solexa-quals -p 10 -r 200 --bowtie2
+cufflinks=-p 10 -b -u --total-hits-norm
+qsub=-cwd -q mem.q -P mem -l cpu=8,vf=16G
+multimode=yes
+multithreads=10
+PATH=/usr/local/bin
+RSeQCPATH=/usr/local/bin/
+PYTHONPATH=/usr/local/lib/python2.7/site-packages
 [LIB]
 Label=UF
 fq1=../01.input/UF1-1.fq.gz
@@ -35,13 +45,3 @@ fq1=../01.input/ST1-1.fq.gz
 fq2=../01.input/ST1-2.fq.gz
 fq1=../01.input/ST2-1.fq.gz
 fq2=../01.input/ST2-2.fq.gz
-[CustomSetting]
-bwaaln=-t 14 -n 2 -q 10
-tophat=--solexa-quals -p 10 -r 200 --bowtie2
-cufflinks=-p 10 -b -u --total-hits-norm
-qsub=-cwd -q mem.q -P mem -l cpu=8,vf=16G
-multimode=yes
-multithreads=10
-PATH=/usr/local/bin
-RSeQCPATH=/usr/local/bin/
-PYTHONPATH=/usr/local/lib/python2.7/site-packages
