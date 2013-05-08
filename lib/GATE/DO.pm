@@ -2180,7 +2180,7 @@ sub callGATK ($$) {
 
 ## Genotyping calling
 			$callVar_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} && ) : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
 				my $bgzip;
