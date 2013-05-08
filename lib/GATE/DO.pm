@@ -955,7 +955,7 @@ sub runRSeQC ($) {
 	}
 	$self->{'cmd'}{'aln'}=0;
 	$rseqc_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
-	$rseqc_cmd .= qq([[ -d \${qc_outdir} ] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$rseqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$rseqc_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib (@libraries) {
@@ -1017,7 +1017,7 @@ sub runRNASeqQC ($) {
 	$rnaseqqc_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$rnaseqqc_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
 	$rnaseqqc_cmd .= qq(cd $self->{"-workdir"}\n);
-	$rnaseqqc_cmd .= qq([[ -d \${qc_outdir} ] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$rnaseqqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	unless (exists $self->{'cmd'}{'aln'} && $self->{'cmd'}{'aln'}==0) {
 		$rnaseqqc_cmd .= $self->runBWA("ref");
 		$self->{'cmd'}{'aln'}=0;
@@ -1076,7 +1076,7 @@ sub runSEECER($) {
 	$seecer_cmd .= qq(export seecerpara="$seecerpara"\n);
 	$seecer_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
 	$seecer_cmd .= qq(cd $self->{"-workdir"}\n);
-	$seecer_cmd .= qq([[ -d \${qc_outdir} ] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$seecer_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$seecer_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -1155,7 +1155,7 @@ sub runBWA($$) {
 	my $alndir=checkPath($self->{"CustomSetting:aln_outdir"});
 	$bwa_cmd .= qq(export alndir="$alndir"\n);
 	$bwa_cmd .= qq(cd \${workdir}\n);
-	$bwa_cmd .= qq([[ -d \${alndir} ] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
+	$bwa_cmd .= qq([[ -d \${alndir} ]] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
 	$bwa_cmd .= qq(cd \${alndir}\n);
 	$bwa_cmd .= "\${bwa} index -a bwtsw \$REFERENCE\n" unless (checkIndex('bwa',$reference)==1);
 	my $db=$1 if ($reference =~ /([^\/\.]+)\.fa/);
@@ -1504,7 +1504,7 @@ sub runBowtie($$) {
 	$bowtie_cmd .= qq(export alndir="$alndir"\n);
 	$bowtie_cmd.=qq(cd \$workdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
-	$bowtie_cmd .= qq([[ -d \${alndir} ] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
+	$bowtie_cmd .= qq([[ -d \${alndir} ]] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
 	$bowtie_cmd .= "cd \${alndir}\n";
 #bowtie [options]* <ebwt> {-1 <m1> -2 <m2> | --12 <r> | <s>} [<hit>]
 #bowtie2 [options]* -x <bt2-idx> {-1 <m1> -2 <m2> | -U <r>} -S [<hit>]
@@ -1663,8 +1663,9 @@ sub runTopHat($) {
 	$tophat_cmd.=qq(cd \$workdir\n);
 	
 	my @libraries=sort keys %{$self->{'LIB'}};
-	$tophat_cmd .= "[[ -d tophat ] || mkdir tophat\n" if (!-d qq($self->{"-workdir"}/tophat));
-	$tophat_cmd .= "cd tophat\n";
+	my $tophat_outdir = (exists $self->{"CustomSetting:tophat_outdir"})? $self->{"CustomSetting:tophat_outdir"} : "tophat";
+	$tophat_cmd .= "[[ -d $tophat_outdir ]] || mkdir $tophat_outdir\n" if (!-d qq($self->{"-workdir"}/$tophat_outdir));
+	$tophat_cmd .= "cd $tophat_outdir\n";
 	foreach my $lib(@libraries) {
 		$tophat_cmd .= qq(echo `date`; echo "$lib"\n);
 		#$tophat_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/tophat/$lib));
@@ -1828,7 +1829,7 @@ sub runGATK ($$) {
 	$callVar_cmd .= qq(export workdir="$workdir"\n);
 	$callVar_cmd .= qq(export vardir="$vardir"\n);
 	$callVar_cmd .= qq(cd \${workdir}\n);
-	$callVar_cmd .= qq([[ -d \${vardir} ] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
+	$callVar_cmd .= qq([[ -d \${vardir} ]] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
 	$callVar_cmd .= qq(cd \${vardir}\n);
 	$callVar_cmd .= "\${samtools} index -a bwtsw \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -2184,6 +2185,80 @@ sub runGATK ($$) {
 	return $callVar_cmd;
 }
 
+
+
+#/usr/local/bin/dindel --analysis getCIGARindels --bamFile realigned.baq.bam --outputFile dindel_output --ref reference.fa
+#python /usr/local/bin/makeWindows.py --inputVarFile dindel_output.variants.txt --windowFilePrefix realign_windows --numWindowsPerFile 1000
+#perl -e 'my @f=glob("realign_windows.*.txt");foreach (@f){my $prefix="dindel_stage2_output_windows.$1" if ($_=~/windows\.(\d+)\./);system "/usr/local/bin/dindel --analysis indels --doDiploid --bamFile realigned.baq.bam --ref reference.fa --varFile $_ --libFile dindel_output.libraries.txt --outputFile $prefix";}'
+#ls dindel_stage2_output_windows.*.glf.txt > dindel_stage2_outputfiles.txt
+#python /usr/local/bin/mergeOutputDiploid.py --inputFiles dindel_stage2_outputfiles.txt --outputFile variantCalls.VCF --ref reference.fa 
+sub runDindle ($) {
+	my $self=shift;
+	my $ref=shift;
+	$ref ||= 'ref';
+	if (!exists $self->{"software:dindle"}) {
+		return "";
+	}
+	my $dindle=checkPath($self->{"software:dindle"});
+	my $dindle_cmd = qq(echo `date`; echo "run Dindle"\n);
+	$dindle_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$dindle_cmd .= qq(export dindle=$dindle\n);
+	my $para = $self->{"CustomSetting:dindle"};
+	$dindle_cmd .= qq(export para="$para"\n);
+	my $multithreads = $self->{"CustomSetting:multithreads"};
+	my $multirun = $self->{"CustomSetting:multithreads-run"};
+	$dindle_cmd .= qq(export multirun=$multirun\n);
+	my $reference = $self->{"database:$ref"};
+	$dindle_cmd .= qq(export REFERENCE=$reference\n);
+	my $dindle_output=(exists $self->{"CustomSetting:dindle_outdir"})?$self->{"CustomSetting:dindle_outdir"}:"dindle";
+	$dindle_cmd .= "[[ -d $dindle_output ]] || mkdir $dindle_output\n";
+	$dindle_cmd .= "cd $dindle_output\n";
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		if (exists $self->{$lib}{"$ref-bam"}) {
+			$dindle_cmd .= "[[ -d $lib ]] || mkdir $lib\n";
+			$dindle_cmd .= "cd $lib\n";
+			my $bam=$self->{$lib}{"$ref-bam"};
+			$dindle_cmd .= qq(\${dindle} --anlysis getCIGARindels --bamFile $bam --outputFile $lib.dindel_output --ref \${REFERENCE}\n);
+			$dindle_cmd .= qq(makeWindows.py --inputVarFile $lib.dindel_output.variants.txt --windowFilePrefix $lib.realign_windows --numWindowsPerFile 1000\n);
+			#/usr/local/bin/dindel --analysis indels --doDiploid --bamFile realigned.baq.bam --ref reference.fa --varFile $_ --libFile dindel_output.libraries.txt --outputFile $prefix
+			$dindle_cmd .= qq(perl -e \'my \@f=glob\("$lib.realign_windows.*.txt"\););
+			$dindle_cmd .= qq(for\(my \$i=0;\$i<\@f;\$i+=$multithreads\){my \@cmdary=();foreach my \$j\(\$i..\(\$i+$multithreads-1\)\){my \$prefix="$lib.dindel_stage2_output_windows.\$1" if \(\$f[\$i]=~/windows\\.\(\\d+\)\\./\););
+			$dindle_cmd .= qq(push \@cmdary,qq\(\"$dindle --analysis indels --doDiploid --bamFile $bam --ref $reference --varFile \$f[\$i] --libFile $lib.dindel_output.libraries.txt --outputFile \$prefix\"\);}my \$cmd="$multirun ".join " ",\@cmdary;system \$cmd}\'\n);
+			$dindle_cmd .= qq(ls $lib.dindel_stage2_output_windows.*.glf.txt > $lib.dindel_stage2_outputfiles.txt\n);
+			$dindle_cmd .= qq(mergeOutputDiploid.py --inputFiles $lib.dindel_stage2_outputfiles.txt --outputFile $lib.variantCalls.VCF --ref \${REFERENCE}\n);
+			$dindle_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+			$dindle_cmd .= qq(cd ..\n);
+		}
+	}
+	return $dindle_cmd;
+}
+
+#soapsnp -B aln.bam -d reference.fa -o cns -r 0.0005 -e 0.001 -u -L 150 -2 -Q J -s dbSNP -T region.out -m
+#The dbSNP file consist of a lot of lines like this one:
+#	chr1    201979756       1       1       0       0.161   0       0       0.839   rs568
+#	The columns from left to right are: name of chromosome, coordinate on the chromosome, whether 
+#	the SNP	has allele frequency information (1 is true, 0 is false), whether the SNP is validated 
+#	by experiment (1 is true, 0 is false), whether the SNP is actually an indel (1 is true, 0 is false),
+#	frequency of A, frequency of C, frequency of T, frequency of G, SNP id. For known SNP sites that do
+#	not have allele frequency information, the frequency information can be arbitrarily determined as 
+#	any positive values, which only imply what alleles have already been deposited in the database.
+sub runSOAPsnp($) {
+	
+}
+
+sub runSOAPsnv ($) {
+	
+}
+
+sub runSOAPsv ($) {
+	
+}
+
+sub runBreakDancer ($) {
+	
+}
+
 #########################################################
 #                                                       #
 #                       Assembly                        #
@@ -2195,7 +2270,7 @@ sub runCufflinks($) {
 	if (!exists $self->{"software:cufflinks"} || !defined $self->{"software:cufflinks"}) {
 		return "";
 	}
-	my $cufflinks_cmd = qq(echo `date`; echo "run Cufflinks"\n);;
+	my $cufflinks_cmd = qq(echo `date`; echo "run Cufflinks"\n);
 	$cufflinks_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	my $cufflinks=checkPath($self->{'software:cufflinks'});
 	$cufflinks_cmd .= qq(export cufflinks=$cufflinks\n);
@@ -2236,7 +2311,7 @@ sub runCufflinks($) {
 	$cufflinks_cmd .= qq(export workdir=$workdir\n);
 	$cufflinks_cmd .= qq(cd \${workdir}\n);
 	
-	$cufflinks_cmd .= "[[ -d cufflinks ] || mkdir cufflinks\n" if (!-d qq($self->{"-workdir"}/cufflinks));
+	$cufflinks_cmd .= "[[ -d cufflinks ]] || mkdir cufflinks\n" if (!-d qq($self->{"-workdir"}/cufflinks));
 	$cufflinks_cmd .= "cd cufflinks\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -2252,27 +2327,6 @@ sub runCufflinks($) {
 	}
 	$cufflinks_cmd .= "cd ..\n";
 	return ($cufflinks_cmd);
-}
-
-#soapsnp -B aln.bam -d reference.fa -o cns -r 0.0005 -e 0.001 -u -L 150 -2 -Q J -s dbSNP -T region.out -m
-#The dbSNP file consist of a lot of lines like this one:
-#		chr1    201979756       1       1       0       0.161   0       0       0.839   rs568
-#	The columns from left to right are: name of chromosome, coordinate on the chromosome, whether 
-#	the SNP	has allele frequency information (1 is true, 0 is false), whether the SNP is validated 
-#	by experiment (1 is true, 0 is false), whether the SNP is actually an indel (1 is true, 0 is false),
-#	frequency of A, frequency of C, frequency of T, frequency of G, SNP id. For known SNP sites that do
-#	not have allele frequency information, the frequency information can be arbitrarily determined as 
-#	any positive values, which only imply what alleles have already been deposited in the database.
-sub runSOAPsnp($) {
-	
-}
-
-sub runSOAPsnv ($) {
-	
-}
-
-sub runSOAPsv ($) {
-	
 }
 
 sub runCuffMerge($) {
@@ -2298,7 +2352,7 @@ sub runCuffMerge($) {
 	$cuffmerge_cmd .= qq(cd $self->{"-workdir"}\n);
 	$cuffmerge_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$cuffmerge_cmd .= qq(export REFERENCE=$reference\n);
-	$cuffmerge_cmd .= "[[ -d cuffmerge ] || mkdir cuffmerge\n" if (!-d qq($self->{"-workdir"}/cuffmerge));
+	$cuffmerge_cmd .= "[[ -d cuffmerge ]] || mkdir cuffmerge\n" if (!-d qq($self->{"-workdir"}/cuffmerge));
 	$cuffmerge_cmd .= "cd cuffmerge\n";
 	if (exists $self->{'database:$gene'}) {
 		my $refGene=checkPath($self->{'database:$gene'});
@@ -2364,7 +2418,7 @@ sub runCuffCompare($) {
 	my $workdir=$self->{"-workdir"};
 	$cuffcompare_cmd=qq(export workdir=$workdir\n);
 	$cuffcompare_cmd=qq(cd \${workdir}\n);
-	$cuffcompare_cmd .= "[[ -d cuffcompare ] || mkdir cuffcompare\n" if (!-d qq($self->{"-workdir"}/cuffcompare));
+	$cuffcompare_cmd .= "[[ -d cuffcompare ]] || mkdir cuffcompare\n" if (!-d qq($self->{"-workdir"}/cuffcompare));
 	$cuffcompare_cmd .= "cd cuffcompare\n";
 
 	if (exists $self->{'database:refGene'}) {
@@ -2422,7 +2476,7 @@ sub runTrinity($) {
 		$trinity_cmd .= qq(echo `date`; echo "$lib"\n);
 		$trinity_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
 		$trinity_cmd .= qq(cd $lib\n);
-		$trinity_cmd .= qq([[ -d trinity_asm ] || mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
+		$trinity_cmd .= qq([[ -d trinity_asm ]] || mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
 		$trinity_cmd .= qq(cd trinity_asm\n);
 		my %read=getlibSeq($self->{"LIB"}{$lib});
 		if (exists $read{1} && exists $read{2}) {
@@ -2530,7 +2584,7 @@ sub runVelvetOases ($) {
 	$velvet_cmd .= qq(export oasespara="$oasespara"\n) if (defined $oasespara);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
-	$velvet_cmd .= qq([[ -d velvet ] || mkdir velvet\n);
+	$velvet_cmd .= qq([[ -d velvet ]] || mkdir velvet\n);
 	foreach my $lib(@libraries) {
 		$velvet_cmd .= qq(echo `date`; echo "$lib"\n);
 		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
@@ -2998,12 +3052,12 @@ sub runMACS ($) {
 	$macs_cmd .= qq(export para="$para"\n);
 	$macs_cmd .= qq(cd $self->{"-workdir"}\n);
 	my $macs_outdir = (exists $self->{"CustomSetting:macs_outdir"}) ? $self->{"CustomSetting:macs_outdir"} : "macs";
-	$macs_cmd .= qq([ -d $macs_outdir ] || mkdir $macs_outdir\n);
+	$macs_cmd .= qq([[ -d $macs_outdir ]] || mkdir $macs_outdir\n);
 	$macs_cmd .= qq(cd $macs_outdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
 		$macs_cmd .= qq(echo `date`; echo "$lib"\n);
-		$macs_cmd .= qq([ -d $lib ] || mkdir $lib\n);
+		$macs_cmd .= qq([[ -d $lib ]] || mkdir $lib\n);
 		$macs_cmd .= qq(cd $lib\n);
 		if (exists $self->{'LIB'}{$lib}{'INPUT'}{'CFILE'} && exists $self->{'LIB'}{$lib}{'INPUT'}{'TFILE'}) {
 			my $tfile=$self->{'LIB'}{$lib}{'INPUT'}{'TFILE'};

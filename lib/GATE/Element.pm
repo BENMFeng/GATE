@@ -88,6 +88,11 @@ sub as($) {
 	$self->runAlternativeSplicing().$self->runASAP();
 }
 
+sub peak($) {
+	my $self=shift;
+	$self->runMACS();
+}
+
 sub plot($) {
 	my $self=shift;
 	$self->runGenePlot();

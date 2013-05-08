@@ -60,7 +60,7 @@ Version: v0.1.7 nightly, May 6th, 2013
     diff		differential expression anaylsis
     as			alternative splicing analysis
     var			genomic variation/polymorism analysis, inculding SNV/SNP, INDEL, SV
-    *peak		find peak for ChIP-Seq
+    peak		find peak for ChIP-Seq
     *edit		gene editing analysis
     fusion		gene fusion analysis
     *ncrna		non-coding RNA analysis
@@ -265,7 +265,7 @@ my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
 qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
 edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
 );
-my @cmd_ary = qw(qc aln var exp diff as plot denovo predict fusion phylogen);
+my @cmd_ary = qw(qc aln var exp diff as peak plot denovo predict fusion phylogen);
 
 # make jobs submit shell scripts
 #my %custom_cmd = ();
