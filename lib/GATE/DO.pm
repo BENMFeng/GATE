@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9h,05-05-2013";
+$VERSION = "0.9i,05-08-2013";
 package GATE::Element;
 #package GATE::Extension;
 use FindBin qw($Bin $Script);
@@ -2552,7 +2552,9 @@ sub runVelvetOases ($) {
 			}
 		}
 		$velvet_cmd .= qq(\${velveth} $lib \${velvethpara} $input\n);
-		$velvet_cmd .= qq(\${velvetg} $lib \${velveghpara}\n);
+		$velvet_cmd .= qq(\${velvetg} $lib \${velveghpara});
+		$velvet_cmd .= qq( -read_trkg yes) if ($velvetgpara!~/read_trkg/);
+		$velvet_cmd .= "\n";
 		if (defined $oases)
 		{
 			$velvet_cmd .= qq(\${oases} $lib \${oasespara}\n) ;
@@ -2669,8 +2671,57 @@ sub make_config {
 	}
 }
 
+#phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
 sub runPhrap ($) {
 	
+}
+
+sub runCAP3 ($) {
+	
+}
+
+sub runPCAP ($) {
+	
+}
+
+
+#/opt/454/bin/newAssembly BAC1
+#/opt/454/bin/addRun BAC1 ~/01.data/W14/454/BAC/5_BAC_454/BAC_1.sff 
+#/opt/454/bin/runProject -cpu 8 BAC1
+sub runNewbler ($) {
+	my $self = shift;
+	if (!exists $self->{"CustomSetting::Newbler"} || !-d $self->{"CustomSetting::Newbler"}) {
+		return "";
+	}
+	my $newbler_cmd = qq(echo `date`; echo "run Newbler"\n);
+	$newbler_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$newbler_cmd .= qq(export NEWBLER="$self->{"CustomSetting::Newbler"}"\n);
+	my $para = $self->{'CustomSetting:Newbler'} if (exists $self->{'CustomSetting:Newbler'});
+	$newbler_cmd .= qq(export para=$para) if (defined $para);
+	my $workdir .= checkPath($self->{"-workdir"});
+	$newbler_cmd .= qq(export workdir=$workdir\n);
+	$newbler_cmd .= qq(cd \${workdir}\n);
+	$newbler_cmd .= "[[ -d newbler] || mkdir newbler\n" if (!-d qq($self->{"-workdir"}/newbler));
+	$newbler_cmd .= qq(cd newbler\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries)
+	{
+		my %read=getlibSeq($self->{"LIB"}{$lib});
+		$newbler_cmd .= qq(\${NEWBLER}/newAssembly $lib\n);
+		if (exists $read{1} && exists $read{2}) {
+			for (my $i=0;$i<@{$read{2}};$i++) {
+				$newbler_cmd .= qq(\${NEWBLER}/addRun $lib -p ${$read{1}}[$i]\n);
+				$newbler_cmd .= qq(\${NEWBLER}/addRun $lib -p ${$read{2}}[$i]\n);
+			}
+		}
+		if (exists $read{0}) {
+			for (my $i=0;$i<@{$read{0}};$i++) {
+				$newbler_cmd .= qq(\${NEWBLER}/addRun $lib ${$read{0}}[$i]\n);
+			}
+		}
+		$newbler_cmd .= qq(\${NEWBLER}/runProject \${para}\n);
+	}
+	return $newbler_cmd;
 }
 
 #==>sr_config.txt<==
@@ -2694,7 +2745,7 @@ sub runPhrap ($) {
 #JF_SIZE=500000000
 #END
 sub runMSR_CA($) {
-	
+	my $self = shift;
 }
 
 #########################################################
@@ -2713,7 +2764,7 @@ sub runCuffdiff($) {
 #-L UF,BF,ST UF1_tophat/accepted_hits.bam,UF2_tophat/accepted_hits.bam,UF3_tophat/accepted_hits.bam
 #BF1_tophat/accepted_hits.bam,BF2_tophat/accepted_hits.bam,BF3_tophat/accepted_hits.bam
 #ST1_tophat/accepted_hits.bam,ST2_tophat/accepted_hits.bam,ST3_tophat/accepted_hits.bam
-	my $cuffdiff_cmd = qq(echo `date`; echo "run Cuffdiff"\n);;
+	my $cuffdiff_cmd = qq(echo `date`; echo "run Cuffdiff"\n);
 	$cuffdiff_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	my $reference=checkPath($self->{"database:$ref"});
 	$cuffdiff_cmd .= qq(export reference=$reference\n);
@@ -2932,22 +2983,36 @@ sub runScripture ($) {
 #########################################################
 
 sub runMACS ($) {
-	#macs14 -t $Indir/$1/$1.bowtie2.sam -c $Indir/$2/$2.bowtie2.sam --bw 180 --gsize mm --verbose 3 --diag  -B -S --nomodel --name $1vs$2 --mfold 10,30 2>macs.log
-	my $self=shift;
+	#macs14 -t test.bowtie2.sam -c control.bowtie2.sam --bw 180 --gsize mm --verbose 3 --diag  -B -S --nomodel --name test_vs_control --mfold 10,30 2>macs.log
+	my $self =shift;
+	my $ref = shift;
+	$ref ||= 'ref';
+	if (!exists $self->{"software:macs"}) {
+		return "";
+	}
 	my $macs=checkPath($self->{"software:macs"});
-	my $para=$self->{'CustomSetting:macs'};
+	my $para=(exists $self->{'CustomSetting:macs'}) ? $self->{'CustomSetting:macs'} : " --bw=180 --verbose=3 --diag  -B -S --nomodel --mfold 10,30";
 	my $macs_cmd = qq(echo `date`; echo "run MACS"\n);
+	$macs_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$macs_cmd .= qq(export macs=$macs\n);
+	$macs_cmd .= qq(export para="$para"\n);
 	$macs_cmd .= qq(cd $self->{"-workdir"}\n);
-	
+	my $macs_outdir = (exists $self->{"CustomSetting:macs_outdir"}) ? $self->{"CustomSetting:macs_outdir"} : "macs";
+	$macs_cmd .= qq([ -d $macs_outdir ] || mkdir $macs_outdir\n);
+	$macs_cmd .= qq(cd $macs_outdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
 		$macs_cmd .= qq(echo `date`; echo "$lib"\n);
-		if (exists $self->{$lib}{"ref-bwabam"}) {
-			foreach my $bam (@{$self->{$lib}{"ref-bwabam"}}) {
-				
-			}
+		$macs_cmd .= qq([ -d $lib ] || mkdir $lib\n);
+		$macs_cmd .= qq(cd $lib\n);
+		if (exists $self->{'LIB'}{$lib}{'INPUT'}{'CFILE'} && exists $self->{'LIB'}{$lib}{'INPUT'}{'TFILE'}) {
+			my $tfile=$self->{'LIB'}{$lib}{'INPUT'}{'TFILE'};
+			my $cfile=$self->{'LIB'}{$lib}{'INPUT'}{'CFILE'};
+			$macs_cmd .= qq(\${macs} -t $tfile -c $cfile \${para} --name $lib\n);
 		}
+		$macs_cmd .= "cd ..\n";
 	}
+	return $macs_cmd;
 }
 
 sub runRUM ($) {
@@ -2975,7 +3040,7 @@ sub runGenomeThreader ($) {
 	}
 	my $gth=checkPath($self->{"software:gth"});
 	my $gth_cmd = qq(echo `date`; echo "run GenomeThreader"\n);
-	$gth_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$gth_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$gth_cmd .= qq(export gth="$gth"\n);
 	my $denovo_genomics="";
 	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
@@ -3381,8 +3446,7 @@ sub check_fileformat ($) {
 			return "fasta.gz";
 		} elsif ($file=~/fastq.gz$/i || $file=~/fq.gz$/i) {
 			return "fastq.gz";
-		} elsif ($file=~/gz$/i)
-		{
+		} elsif ($file=~/gz$/i) {
 			open (IN,"zcat $file|");
 			my $line=<IN>;
 			if ($line=~/^\>/) {
@@ -3391,6 +3455,8 @@ sub check_fileformat ($) {
 				return "fastq.gz";
 			}
 			close IN;
+		} elsif ($file=~/sff/) {
+			return "sff";
 		}
 	} elsif (-T $file) {
 		if ($file=~/sam/i) {
