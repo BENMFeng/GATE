@@ -936,16 +936,6 @@ sub runFltAP ($) {
 	}
 }
 
-sub print_check_process {
-	my @ary=@_;
-	my $out="";
-	foreach my $process(@ary)
-	{
-		$out .= qq(user=`whoami`\np=\`ps -u \$user -f |grep $process |grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f |grep $process |grep -v grep\`\ndone\n);
-	}
-	return $out;
-}
-
 sub runRSeQC ($) {
 	my $self = shift;
 	if (!exists $self->{"CustomSetting:RSeQCPATH"} || !defined $self->{"CustomSetting:RSeQCPATH"}){
@@ -964,7 +954,8 @@ sub runRSeQC ($) {
 		$self->{'cmd'}{'aln'} = 0;
 	}
 	$self->{'cmd'}{'aln'}=0;
-	$rseqc_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$rseqc_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
+	$rseqc_cmd .= qq([[ -d \${qc_outdir} ] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$rseqc_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib (@libraries) {
@@ -1024,8 +1015,9 @@ sub runRNASeqQC ($) {
 	
 	my $rnaseqqc_cmd = qq(echo `date`; echo "run RNA-SeQC"\n);
 	$rnaseqqc_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$rnaseqqc_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
 	$rnaseqqc_cmd .= qq(cd $self->{"-workdir"}\n);
-	$rnaseqqc_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$rnaseqqc_cmd .= qq([[ -d \${qc_outdir} ] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	unless (exists $self->{'cmd'}{'aln'} && $self->{'cmd'}{'aln'}==0) {
 		$rnaseqqc_cmd .= $self->runBWA("ref");
 		$self->{'cmd'}{'aln'}=0;
@@ -1082,8 +1074,9 @@ sub runSEECER($) {
 	$seecer_cmd .= qq(export seecer=$seecer\n);
 	$seecer_cmd .= qq(export jellyfish=$jellyfish\n);
 	$seecer_cmd .= qq(export seecerpara="$seecerpara"\n);
+	$seecer_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
 	$seecer_cmd .= qq(cd $self->{"-workdir"}\n);
-	$seecer_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$seecer_cmd .= qq([[ -d \${qc_outdir} ] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$seecer_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -1124,8 +1117,9 @@ sub runCRAC($) {
 	$crac_cmd .= qq(export REFERENCE="$reference"\n);
 	$crac_cmd .= qq(export crac=$crac\n);
 	$crac_cmd .= qq(export seecerpara="$cracpara"\n);
+	$crac_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
 	$crac_cmd .= qq(cd $self->{"-workdir"}\n);
-	$crac_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$crac_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -1213,7 +1207,7 @@ sub runBWA($$) {
 	my $alndir=checkPath($self->{"CustomSetting:aln_outdir"});
 	$bwa_cmd .= qq(export alndir="$alndir"\n);
 	$bwa_cmd .= qq(cd \${workdir}\n);
-	$bwa_cmd .= qq(mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
+	$bwa_cmd .= qq([[ -d \${alndir} ] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
 	$bwa_cmd .= qq(cd \${alndir}\n);
 	$bwa_cmd .= "\${bwa} index -a bwtsw \$REFERENCE\n" unless (checkIndex('bwa',$reference)==1);
 	my $db=$1 if ($reference =~ /([^\/\.]+)\.fa/);
@@ -1562,7 +1556,7 @@ sub runBowtie($$) {
 	$bowtie_cmd .= qq(export alndir="$alndir"\n);
 	$bowtie_cmd.=qq(cd \$workdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
-	$bowtie_cmd .= qq(mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
+	$bowtie_cmd .= qq([[ -d \${alndir} ] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
 	$bowtie_cmd .= "cd \${alndir}\n";
 #bowtie [options]* <ebwt> {-1 <m1> -2 <m2> | --12 <r> | <s>} [<hit>]
 #bowtie2 [options]* -x <bt2-idx> {-1 <m1> -2 <m2> | -U <r>} -S [<hit>]
@@ -1721,7 +1715,7 @@ sub runTopHat($) {
 	$tophat_cmd.=qq(cd \$workdir\n);
 	
 	my @libraries=sort keys %{$self->{'LIB'}};
-	$tophat_cmd .= "mkdir tophat\n" if (!-d qq($self->{"-workdir"}/tophat));
+	$tophat_cmd .= "[[ -d tophat ] || mkdir tophat\n" if (!-d qq($self->{"-workdir"}/tophat));
 	$tophat_cmd .= "cd tophat\n";
 	foreach my $lib(@libraries) {
 		$tophat_cmd .= qq(echo `date`; echo "$lib"\n);
@@ -1886,7 +1880,7 @@ sub callGATK ($$) {
 	$callVar_cmd .= qq(export workdir="$workdir"\n);
 	$callVar_cmd .= qq(export vardir="$vardir"\n);
 	$callVar_cmd .= qq(cd \${workdir}\n);
-	$callVar_cmd .= qq(mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
+	$callVar_cmd .= qq([[ -d \${vardir} ] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
 	$callVar_cmd .= qq(cd \${vardir}\n);
 	$callVar_cmd .= "\${samtools} index -a bwtsw \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -2294,7 +2288,7 @@ sub runCufflinks($) {
 	$cufflinks_cmd .= qq(export workdir=$workdir\n);
 	$cufflinks_cmd .= qq(cd \${workdir}\n);
 	
-	$cufflinks_cmd .= "mkdir cufflinks\n" if (!-d qq($self->{"-workdir"}/cufflinks));
+	$cufflinks_cmd .= "[[ -d cufflinks ] || mkdir cufflinks\n" if (!-d qq($self->{"-workdir"}/cufflinks));
 	$cufflinks_cmd .= "cd cufflinks\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -2356,7 +2350,7 @@ sub runCuffMerge($) {
 	$cuffmerge_cmd .= qq(cd $self->{"-workdir"}\n);
 	$cuffmerge_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$cuffmerge_cmd .= qq(export REFERENCE=$reference\n);
-	$cuffmerge_cmd .= "mkdir cuffmerge\n" if (!-d qq($self->{"-workdir"}/cuffmerge));
+	$cuffmerge_cmd .= "[[ -d cuffmerge ] || mkdir cuffmerge\n" if (!-d qq($self->{"-workdir"}/cuffmerge));
 	$cuffmerge_cmd .= "cd cuffmerge\n";
 	if (exists $self->{'database:$gene'}) {
 		my $refGene=checkPath($self->{'database:$gene'});
@@ -2422,7 +2416,7 @@ sub runCuffCompare($) {
 	my $workdir=$self->{"-workdir"};
 	$cuffcompare_cmd=qq(export workdir=$workdir\n);
 	$cuffcompare_cmd=qq(cd \${workdir}\n);
-	$cuffcompare_cmd .= "mkdir cuffcompare\n" if (!-d qq($self->{"-workdir"}/cuffcompare));
+	$cuffcompare_cmd .= "[[ -d cuffcompare ] || mkdir cuffcompare\n" if (!-d qq($self->{"-workdir"}/cuffcompare));
 	$cuffcompare_cmd .= "cd cuffcompare\n";
 
 	if (exists $self->{'database:refGene'}) {
@@ -2480,7 +2474,7 @@ sub runTrinity($) {
 		$trinity_cmd .= qq(echo `date`; echo "$lib"\n);
 		$trinity_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
 		$trinity_cmd .= qq(cd $lib\n);
-		$trinity_cmd .= qq(mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
+		$trinity_cmd .= qq([[ -d trinity_asm ] || mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
 		$trinity_cmd .= qq(cd trinity_asm\n);
 		my %read=getlibSeq($self->{"LIB"}{$lib});
 		if (exists $read{1} && exists $read{2}) {
@@ -2588,7 +2582,7 @@ sub runVelvetOases ($) {
 	$velvet_cmd .= qq(export oasespara="$oasespara"\n) if (defined $oasespara);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
-	$velvet_cmd .= qq(mkdir velvet\n);
+	$velvet_cmd .= qq([[ -d velvet ] || mkdir velvet\n);
 	foreach my $lib(@libraries) {
 		$velvet_cmd .= qq(echo `date`; echo "$lib"\n);
 		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
@@ -2650,7 +2644,7 @@ sub runSOAPdenovo ($) {
 	$soapdenovo_cmd .= qq(export soapdenvo_para="$para"\n);
 	$config=$1 if ($para=~/\-s\s+(\S+)/);
 	$soapdenovo_cmd .= qq(cd $self->{"-workdir"}\n);
-	$soapdenovo_cmd .= qq(mkdir soapdenvo\n);
+	$soapdenovo_cmd .= qq([[ -d soapdenovo] || mkdir soapdenvo\n);
 	if (defined $config) {
 		$soapdenovo_cmd .= qq(\${soapdenvo} \${soapdenvo_para}});
 		$soapdenovo_cmd .= qq( -s $config) if ($para !~/\-s/);
@@ -2722,7 +2716,7 @@ sub runCuffdiff($) {
 	my $workdir .= checkPath($self->{"-workdir"});
 	$cuffdiff_cmd .= qq(export workdir=$workdir\n);
 	$cuffdiff_cmd .= qq(cd \${workdir}\n);
-	$cuffdiff_cmd .= "mkdir cuffdiff\n" if (!-d qq($self->{"-workdir"}/cuffdiff));
+	$cuffdiff_cmd .= "[[ -d cuffdiff] || mkdir cuffdiff\n" if (!-d qq($self->{"-workdir"}/cuffdiff));
 	$cuffdiff_cmd .= "cd cuffdiff\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my ($label,$bam)=("","");
@@ -3350,6 +3344,16 @@ sub check_fileformat ($) {
 	}
 }
 
+sub print_check_process {
+	my @ary=@_;
+	my $out="";
+	foreach my $process(@ary)
+	{
+		$out .= qq(user=`whoami`\np=\`ps -u \$user -f |grep $process |grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f |grep $process |grep -v grep\`\ndone\n);
+	}
+	return $out;
+}
+
 sub get_time ($) {
 	my $self=shift;
 	my  ($sec,$min,$hour,$mday,$mon,$year) = (localtime)[0..5];
@@ -3369,6 +3373,5 @@ sub get_time ($) {
 	$self->{second}=$sec;
 	return "## $year-$mon-$mday $hour:$min:$sec\n";
 }
-
 
 1;
