@@ -2661,8 +2661,8 @@ sub runSOAPdenovo ($) {
 		print STDERR "no SOAPdenovo.config file found!\n";
 		my @libraries=sort keys %{$self->{'LIB'}};
 		foreach my $lib(@libraries) {
-			my $config=$self->make_config("program","SOAPdenovo","outdir",qq($self->{"-workdir"}/$soapdenovo),"lib",$lib);
-			$soapdenovo_cmd .= qq(\${soapdenvo} \${soapdenvo_para}} -s $config -o $lib\n);
+			my $makeconfig=$self->make_config("program","SOAPdenovo","outdir",qq($self->{"-workdir"}/$soapdenovo),"lib",$lib);
+			$soapdenovo_cmd .= qq(\${soapdenvo} \${soapdenvo_para}} -s $makeconfig -o $lib\n);
 			$self->{"denovo_genomics"}=qq($self->{"-workdir"}/soapdenvo/$lib.scafSeq);
 		}
 	}
@@ -2671,12 +2671,80 @@ sub runSOAPdenovo ($) {
 
 sub make_config {
 	my ($self,%attrs)=@_;
+	my $program = $attrs{"program"};
+	my $outdir  = $attrs{"outdir"};
+	my $lib     = $attrs{"lib"};
+	my $config  = "$outdir/$lib.$program.config";
+	if ($program =~ /SOAPdenovo/i && exists $self->{"LIB"}{$lib}) {
+		if (-f $config) {
+			die "$config is existing!\n";
+		}
+		open(OUT,">$config") or die $!;
+		my %read=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $read{1} && exists $read{2}) {
+			print OUT "[LIB]\n";
+			for (my $i=0;$i<@{$read{2}};$i++) {
+				my $type=(check_fileformat(${$read{1}}[$i])=~/fastq/i)?"fq":"fa";
+				my $R1=$type."1";
+				my $ins=(exists $self->{$lib}{$R1}{$i}{'PI'}) ? $self->{$lib}{$R1}{$i}{'PI'} : 200;
+				print OUT "avg_ins=$ins\n";
+				my $reverse=($ins>600)?1:0;
+				print OUT "reverse_seq=$reverse\n";
+				my $rank=1;
+				if ($ins<=500) {
+					$rank=2;
+				} elsif ($ins<1000) {
+					$rank=3;
+				}
+				else {
+					$rank=int($ins/1000)+3;
+				}
+				print OUT "rank=$rank\n";
+				print OUT "pair_num_cutoff=3\n";
+				print OUT "asm_flag=3\n";
+				my $head=($type=~/fq/) ? "q" : "f";
+				print OUT $head.qq(1=${$read{1}}[$i]\n);
+				print OUT $head.qq(2=${$read{2}}[$i]\n);
+			}
+		}
+		if (exists $read{0}) {
+			print OUT "[LIB]\n";
+			for (my $i=0;$i<@{$read{0}};$i++) {
+				print OUT "rank=1\nasm_flags=1\n";
+				my $head=(check_fileformat(${$read{0}}[$i])=~/fastq/i)?"q":"f";
+				print OUT qq($head=${$read{0}}[$i]\n);
+			}
+		}
+		
+		close OUT;
+		return $config;
+	}
 }
 
 sub runPhrap ($) {
 	
 }
 
+#==>sr_config.txt<==
+#PATHS
+#JELLYFISH_PATH=/usr/local/genome/MSR-CA-1.6.1/bin
+#SR_PATH=/usr/local/genome/MSR-CA-1.6.1/bin
+#CA_PATH=/usr/local/genome/MSR-CA-1.6.1/CA/Linux-amd64/bin
+#END
+#
+#DATA
+#PE= pe 400 40  400.20110831.s_2_uniq1.fastq 400.20110831.s_2_uniq2.fastq
+#JUMP= mp 1000 100 1.0k.20110518.s_5_uniq2.fastq 1.0k.20110518.s_5_uniq1.fastq
+#END
+#
+#PARAMETERS
+#LIMIT_JUMP_COVERAGE = 60
+#CA_PARAMETERS = ovlMerSize=30 cgwErrorRate=0.15 ovlMemory=4GB
+#KMER_COUNT_THRESHOLD = 1
+#EXTEND_JUMP_READS=1
+#NUM_THREADS= 16
+#JF_SIZE=500000000
+#END
 sub runMSR_CA($) {
 	
 }
