@@ -58,6 +58,11 @@ sub new ($$;@) {
 	return bless($self,$class);
 }
 
+sub bc($) {
+	my $self=shift;
+	$self->runPhred();
+}
+
 sub qc($) {
 	my $self=shift;
 	$self->selectIdxFastq().$self->mergeOverlapPE().$self->runQA().$self->runFltDup().$self->runFltAP().$self->runRSeQC().$self->runRNASeqQC().$self->runSEECER();

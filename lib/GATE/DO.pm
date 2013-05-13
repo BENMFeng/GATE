@@ -153,7 +153,91 @@ sub parseDir($) {
 #                                                       #
 #########################################################
 
-#v1.1, 2013-05-03
+#mkdir $directory/qual_dir"
+#mkdir $directory/seq_dir"
+#phred -trim_cutoff 0.01 -trim_alt '' -trim_fasta -id $directory/ -sd $directory/seq_dir/ -qd $directory/qual_dir/"
+sub runPhred ($) {
+	my $self = shift;
+	if (!exists $self->{"software:phred"} && `which phred` eq "") {
+		return "";
+	}
+	my $phred=(exists $self->{"software:phred"})?checkPaht($self->{"software:phred"}):`which phred`;
+	chomp $phred;
+	my $phredpar=$self->{"database:phredpar"} if (exists $self->{"database:phredpar"});
+	my $phred_cmd =  qq(echo `date`; echo "run Phred"\n);
+	$phred_cmd .= qq(export PHRED_PARAMETER_FILE=$phredpar\n) if (defined $phredpar);
+	$phred_cmd .= qq(export phred=$phred\n) if (defined $phred);
+	my $para = (exists $self->{"CustomSetting:phred"}) ? $self->{"CustomSetting:phred"} : qq(-trim_cutoff 0.01 -trim_alt \\'\\' -trim_fasta);
+	$phred_cmd .= qq(export phredpara="$para"\n) if (defined $para);
+	$phred_cmd .= qq(cd $self->{"-workdir"}\n);
+	$phred_cmd .= qq(export bc_outdir=$self->{"CustomSetting:bc_outdir"}\n);
+	$phred_cmd .= qq([[ -d \${bc_outdir} || mkdir \${bc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}));
+	$phred_cmd .= qq(cd \${bc_outdir}\n);
+	$phred_cmd .= qq([[ -d phred ]] || mkdir phred\n);
+	$phred_cmd .= qq(cd phred\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $gotseq=0;
+	foreach my $lib(@libraries) {
+		my @dir;
+		if (exists $self->{"LIB"}{$lib}{"sanger"}) {
+			push @dir, ${$self->{"LIB"}{$lib}{"sanger"}}[0];
+		} elsif (exists $self->{"LIB"}{$lib}{"3730"}) {
+			push @dir, ${$self->{"LIB"}{$lib}{"3730"}}[0];
+		} elsif (exists $self->{"LIB"}{$lib}{"ab1"}) {
+			push @dir, ${$self->{"LIB"}{$lib}{"3730"}}[0];
+		}
+		if (@dir > 0) {
+			for my $directory (@dir) {
+				my $dirname = (split /\//,$directory)[-1]; 
+				$phred_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
+				$phred_cmd .= qq(ln -s $directory ; mkdir -p $dirname/qual_dir ; mkdir -p $dirname/seq_dir\n);
+				$phred_cmd .= qq(\${phred} \${phredpara}-id $dirname/ -sd $dirname/seq_dir/ -qd $dirname/qual_dir/\n);
+				$phred_cmd .= qq(cat $dirname/seq_dir/*.seq > $lib.seq\n);
+				$phred_cmd .= qq(cat $dirname/qual_dir/*.qual > $lib.qual\n);
+				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.seq);
+				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.qual);
+				$phred_cmd .= qq(cd ..\n);
+				$gotseq++;
+			}
+		}
+	}
+	$phred_cmd .= qq(cd ..\n);
+	return $phred_cmd if ($gotseq!=0);
+}
+
+#CASAVA_1.8.2/bin/configureBclToFastq.pl --input-dir /share/original/130427_SN483_0332_AC1RYWACXX/Data/Intensities/BaseCalls/ \
+#--output-dir /share/fastq/130427_SN483_0332_AC1RYWACXX/Demultiplexed --sample-sheet /share/sample_sheet/0332_AC1RYWACXX-SS.csv \
+#--fastq-cluster-count 0 --mismatches 1
+sub runCASAVA ($) {
+	my $self = shift;
+	my $CASAVA_PATH="";
+	if (exists $self->{'CustomSetting:CASAVA_PATH'}) {
+		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVA_PATH'});
+	} elsif (exists $self->{'CustomSetting:CASAVAPATH'}){
+		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVAPATH'});
+	} elsif (exists $self->{'CustomSetting:CASAVA'}){
+		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVA'});
+	}
+	my $casava_cmd = qq(echo `date`; echo "run CASAVA"\n);
+	$casava_cmd .= qq(export CASAVA_PATH=$CASAVA_PATH\n) if (defined $CASAVA_PATH);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	
+}
+
+sub runLifeScope($) {
+	
+}
+
+sub runSolidCaller ($) {
+	
+}
+
+sub runDataAnalysis ($) {
+	
+}
+
+
+#selectIdxFastq.pl v1.1, 2013-05-03
 sub selectIdxFastq ($) {
 	my $self = shift;
 	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || (!exists $self->{'idx'} && !exists $self->{'bar'})) {
@@ -2755,55 +2839,6 @@ sub make_config {
 	}
 }
 
-
-#mkdir $directory/qual_dir"
-#mkdir $directory/seq_dir"
-#phred -trim_cutoff 0.01 -trim_alt '' -trim_fasta -id $directory/ -sd $directory/seq_dir/ -qd $directory/qual_dir/"
-sub runPhred ($) {
-	my $self = shift;
-	if (!exists $self->{"software:phred"} && `which phred` eq "") {
-		return "";
-	}
-	my $phred=(exists $self->{"software:phred"})?checkPaht($self->{"software:phred"}):`which phred`;
-	chomp $phred;
-	my $phredpar=$self->{"database:phredpar"} if (exists $self->{"database:phredpar"});
-	my $phred_cmd = qq(export PHRED_PARAMETER_FILE=$phredpar\n) if (defined $phredpar);
-	$phred_cmd .= qq(export phred=$phred\n) if (defined $phred);
-	my $para = (exists $self->{"CustomSetting:phred"}) ? $self->{"CustomSetting:phred"} : qq(-trim_cutoff 0.01 -trim_alt \\'\\' -trim_fasta);
-	$phred_cmd .= qq(export phredpara="$para"\n) if (defined $para);
-	$phred_cmd .= qq(cd $self->{"-workdir"}\n);
-	$phred_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
-	$phred_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$phred_cmd .= qq(cd \${qc_outdir}\n);
-	$phred_cmd .= qq([[ -d phred ]] || mkdir phred\n);
-	$phred_cmd .= qq(cd phred\n);
-	my @libraries=sort keys %{$self->{'LIB'}};
-	foreach my $lib(@libraries) {
-		my @dir;
-		if (exists $self->{"LIB"}{$lib}{"sanger"}) {
-			push @dir, ${$self->{"LIB"}{$lib}{"sanger"}}[0];
-		} elsif (exists $self->{"LIB"}{$lib}{"3730"}) {
-			push @dir, ${$self->{"LIB"}{$lib}{"3730"}}[0];
-		} elsif (exists $self->{"LIB"}{$lib}{"ab1"}) {
-			push @dir, ${$self->{"LIB"}{$lib}{"3730"}}[0];
-		}
-		if (@dir > 0) {
-			for my $directory (@dir) {
-				my $dirname = (split /\//,$directory)[-1]; 
-				$phred_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
-				$phred_cmd .= qq(ln -s $directory ; mkdir -p $dirname/qual_dir ; mkdir -p $dirname/seq_dir\n);
-				$phred_cmd .= qq(\${phred} \${phredpara}-id $dirname/ -sd $dirname/seq_dir/ -qd $dirname/qual_dir/\n);
-				$phred_cmd .= qq(cat $dirname/seq_dir/*.seq > $lib.seq\n);
-				$phred_cmd .= qq(cat $dirname/qual_dir/*.qual > $lib.qual\n);
-				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$lib.seq);
-				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$lib.qual);
-				$phred_cmd .= qq(cd ..\n);
-			}
-		}
-	}
-	$phred_cmd .= qq(cd ..\n);
-	return $phred_cmd;
-}
 
 #phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
 sub runPhrap ($) {

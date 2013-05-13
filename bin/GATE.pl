@@ -52,6 +52,7 @@ Version: v0.1.7 nightly, May 6th, 2013
 
 =head1 Function
 
+    bc			base calling
     qc			data processing & quality control
     denovo		de novo assembly
     predict		repeat masking and gene prediction
