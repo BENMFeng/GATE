@@ -153,6 +153,7 @@ sub parseDir($) {
 #                                                       #
 #########################################################
 
+#v1.1, 2013-05-03
 sub selectIdxFastq ($) {
 	my $self = shift;
 	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || (!exists $self->{'idx'} && !exists $self->{'bar'})) {
@@ -179,7 +180,7 @@ sub selectIdxFastq ($) {
 		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$Idx_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$Idx_cmd .= "cd $lib\n";
-		$Idx_cmd_multi .= "cd $lib && ";
+		$Idx_cmd_multi .= "cd $lib ; ";
 		for my $lbmark(sort keys %{$self->{"LIB"}{$lib}}) {
 			my ($lb,$i)=($1,$2) if ($lbmark=~/^(\w+)([12])/);
 			$lb=$lbmark if (!defined $lb);
@@ -242,7 +243,7 @@ sub selectIdxFastq ($) {
 						$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq1 $reads1 -fastq2 $reads2);
 						$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
 						$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $barcode);
-						$Idx_cmd_multi .= qq( && );
+						$Idx_cmd_multi .= qq( ; );
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2));
 						${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
@@ -276,7 +277,7 @@ sub selectIdxFastq ($) {
 							$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq $reads1 );
 							$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
 							$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $barcode);
-							$Idx_cmd_multi .= qq( && );
+							$Idx_cmd_multi .= qq( ; );
 							die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 							${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
 							$withIdx++;
@@ -286,7 +287,7 @@ sub selectIdxFastq ($) {
 			}
 		}
 		$Idx_cmd .= "cd ..\n";
-		$Idx_cmd_multi .= "cd .. && ";
+		$Idx_cmd_multi .= "cd .. ; ";
 		$Idx_cmd_multi .= "cd .. ";
 		if ($withIdx % $self->{"CustomSetting:multithreads"}!=0)
 		{
@@ -334,7 +335,7 @@ sub mergeOverlapPE($) {
 			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd .= "cd $lib\n";
-			$mop_cmd_multi .= "cd $lib && ";
+			$mop_cmd_multi .= "cd $lib ; ";
 			my %fq=getlibSeq($self->{"LIB"}{$lib});
 			my @Reads1=();
 			@Reads1=@{$fq{1}} if (exists $fq{1});
@@ -357,7 +358,7 @@ sub mergeOverlapPE($) {
 				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara\n";
-					$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
+					$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara ; ";
 					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
 					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
 					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
@@ -369,7 +370,7 @@ sub mergeOverlapPE($) {
 				}
 			}
 			$mop_cmd .= "cd ..\n";
-			$mop_cmd_multi .= "cd .. && ";
+			$mop_cmd_multi .= "cd .. ; ";
 			$mop_cmd_multi .= "cd ..";
 			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
 			{
@@ -410,7 +411,7 @@ sub mergeOverlapPE($) {
 			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd .= "cd $lib\n";
-			$mop_cmd_multi .= "cd $lib && ";
+			$mop_cmd_multi .= "cd $lib ; ";
 			my %fq=getlibSeq($self->{"LIB"}{$lib});
 			my @Reads1=();
 			@Reads1=@{$fq{1}} if (exists $fq{1});
@@ -433,9 +434,9 @@ sub mergeOverlapPE($) {
 				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$bwapemerge $moppara -m $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq\n";
-					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq && );
+					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq ; );
 					$mop_cmd .= qq($bwapemerge $moppara -u $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}'\n);
-					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' && );
+					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' ; );
 					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
 					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
 					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
@@ -447,7 +448,7 @@ sub mergeOverlapPE($) {
 				}
 			}
 			$mop_cmd .= "cd ..\n";
-			$mop_cmd_multi .= "cd .. && ";
+			$mop_cmd_multi .= "cd .. ; ";
 			$mop_cmd_multi .= "cd ..";
 			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
 			{
@@ -498,8 +499,8 @@ sub runQA($) {
 			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
-			$qa_cmd_multi .= "cd $lib && ";
-			$qa_cmd_multi .= "mkdir QA && " if ($para !~ /\-d/);
+			$qa_cmd_multi .= "cd $lib ; ";
+			$qa_cmd_multi .= "mkdir QA ; " if ($para !~ /\-d/);
 			for my $i(sort keys %{$self->{"LIB"}{$lib}}) {
 				if (exists $self->{"LIB"}{$lib}{$i}) {
 					my $j=0;
@@ -510,25 +511,25 @@ sub runQA($) {
 							if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/QA/$fq))
 							{
 								$qa_cmd .= "gzip -cd $reads > $fq\n";
-								$qa_cmd_multi .= "gzip -cd $fq && ";
+								$qa_cmd_multi .= "gzip -cd $fq ; ";
 							}
 							$qa_cmd .= "$SolexaQA $fq ";
 							$qa_cmd .= ($para=~/\-d/) ? " $para\n" : "$para -d QA\n";
 							$qa_cmd_multi .= "$SolexaQA $fq ";
-							$qa_cmd_multi .= ($para=~/\-d/) ? " $para && " : "$para -d QA &&";
+							$qa_cmd_multi .= ($para=~/\-d/) ? " $para ; " : "$para -d QA ; ";
 						} else {
 							$qa_cmd .= "ln -s $reads\n";
 							$qa_cmd .= "$SolexaQA $reads ";
 							$qa_cmd .= ($para=~/\-d/) ? "$para\n" : "$para -d QA\n";
-							$qa_cmd_multi .= "ln -s $reads && ";
+							$qa_cmd_multi .= "ln -s $reads ; ";
 							$qa_cmd_multi .= "$SolexaQA $reads ";
-							$qa_cmd_multi .= ($para=~/\-d/) ? " $para && " : "$para -d QA && ";
+							$qa_cmd_multi .= ($para=~/\-d/) ? " $para ; " : "$para -d QA ; ";
 						}
 					}
 				}
 			}
 			$qa_cmd .= "cd ..\n";
-			$qa_cmd_multi .= "cd .. && ";
+			$qa_cmd_multi .= "cd .. ; ";
 			$qa_cmd_multi .= "cd .. ";
 			$multi++;
 			if ($multi % $self->{"CustomSetting:multithreads"}!=0){
@@ -571,8 +572,8 @@ sub runQA($) {
 			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
-			$qa_cmd_multi .= "cd $lib && ";
-			$qa_cmd_multi .= "mkdir QA && " if ($para !~ /\-d/);
+			$qa_cmd_multi .= "cd $lib ; ";
+			$qa_cmd_multi .= "mkdir QA ; " if ($para !~ /\-d/);
 			for my $i(sort keys %{$self->{"LIB"}{$lib}}) {
 				if (exists $self->{"LIB"}{$lib}{$i}) {
 					my $j=0;
@@ -583,23 +584,23 @@ sub runQA($) {
 							if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/QA/$fq))
 							{
 								$qa_cmd .= "gzip -cd $reads > $fq\n";
-								$qa_cmd_multi .= "gzip -cd $fq && ";
+								$qa_cmd_multi .= "gzip -cd $fq ; ";
 							}
 							$qa_cmd .= "\${check_fastq} -i $fq ";
 							$qa_cmd .= (defined $para) ? " $para > $fq.fqcheck\n" : " > $fq.fqcheck\n";
 							$qa_cmd_multi .= "\${check_fastq} -i $fq ";
-							$qa_cmd_multi .= (defined $para) ? " $para > $fq.fqcheck && " : " > $fq.fqcheck && ";
+							$qa_cmd_multi .= (defined $para) ? " $para > $fq.fqcheck ; " : " > $fq.fqcheck ; ";
 							if (defined $distribute_fqcheck)
 							{
 								$qa_cmd .= qq(\${distribute_fqcheck} $fq.fqcheck -o $fq.fqcheck\n);
-								$qa_cmd_multi .= qq(\${distribute_fqcheck} $fq.fqcheck -o $fq.fqcheck && );
+								$qa_cmd_multi .= qq(\${distribute_fqcheck} $fq.fqcheck -o $fq.fqcheck ; );
 							}
 						}
 					}
 				}
 			}
 			$qa_cmd .= "cd ..\n";
-			$qa_cmd_multi .= "cd .. && ";
+			$qa_cmd_multi .= "cd .. ; ";
 			$qa_cmd_multi .= "cd .. ";
 			$multi++;
 			if ($multi % $self->{"CustomSetting:multithreads"}!=0){
@@ -776,9 +777,9 @@ sub runFltAP ($) {
 		$fltap_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$fltap_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$fltap_cmd .= "cd $lib\n";
-		$fltap_cmd_multi .= "cd $lib && ";
+		$fltap_cmd_multi .= "cd $lib ; ";
 		$fltap_cmd .= qq(cp $align_matrix ./\n) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
-		$fltap_cmd_multi .=  qq(cp $align_matrix ./ && ) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
+		$fltap_cmd_multi .=  qq(cp $align_matrix ./ ; ) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
 		
 		my %Reads;
 		foreach my $i(sort keys %{$self->{"LIB"}{$lib}}) {
@@ -792,7 +793,7 @@ sub runFltAP ($) {
 					if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$fq))
 					{
 						$fltap_cmd .= "gzip -cd $reads > $fq\n" if ($reads=~/gz$/);
-						$fltap_cmd_multi .= "gzip -cd $reads > $fq && " if ($reads=~/gz$/);
+						$fltap_cmd_multi .= "gzip -cd $reads > $fq ; " if ($reads=~/gz$/);
 					}
 				}
 				
@@ -804,21 +805,21 @@ sub runFltAP ($) {
 				if ( ( (!exists $self->{"CustomSetting:reuse"}) || (exists $self->{"CustomSetting:reuse"} && $self->{"CustomSetting:reuse"} =~/N/i) ) && !-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$detail))
 				{
 					$fltap_cmd .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para\n";
-					$fltap_cmd_multi .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para && ";
+					$fltap_cmd_multi .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para ; ";
 				}
 				$fltap_cmd .= "$trim_seq $trim_seq_para -trim_detail $detail $fq\n" if (exists $self->{"software:trim_seq"});
-				$fltap_cmd_multi .= "$trim_seq $trim_seq_para -trim_detail $detail $fq  && " if (exists $self->{"software:trim_seq"});
+				$fltap_cmd_multi .= "$trim_seq $trim_seq_para -trim_detail $detail $fq  ; " if (exists $self->{"software:trim_seq"});
 				my $prefix=$1 if ($fqname=~/(\S+)\.[^\.\s]+$/);
 				if (defined $fastqcut)
 				{
 					$fltap_cmd .= "$fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq\n";
-					$fltap_cmd_multi .= " $fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq && ";
+					$fltap_cmd_multi .= " $fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq ; ";
 					push @{$Reads{$i}},["$prefix.clean.fastq","$fqname.filter.out $fqname.qcut.out"];
 				}
 				else
 				{
 					$fltap_cmd .= "mv $fqname.trim.out $prefix.clean.fastq\n";
-					$fltap_cmd_multi .= " mv $fqname.trim.out $prefix.clean.fastq && ";
+					$fltap_cmd_multi .= " mv $fqname.trim.out $prefix.clean.fastq ; ";
 					push @{$Reads{$i}},["$prefix.clean.fastq","$fqname.filter.out"];
 				}
 				#push @{$self->{"LIB"}{"$sm-clean"}{$i}},$self->{"-workdir"}."/QC/$sm/$prefix.clean.fastq";
@@ -849,8 +850,8 @@ sub runFltAP ($) {
 						$single2=~s/fastq$/single.fastq/i;
 						$fltap_cmd .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2\n";
 						$fltap_cmd .= "rm $reads1 $reads2\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
-						$fltap_cmd_multi .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
-						$fltap_cmd_multi .= "rm $reads1 $reads2 && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+						$fltap_cmd_multi .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 ; ";
+						$fltap_cmd_multi .= "rm $reads1 $reads2 ; " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
 						${$self->{"LIB"}{$lib}{"$lb$i"}}[$p]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$pair1";
 						${$self->{"LIB"}{$lib}{"$lb$j"}}[$p]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$pair2";
 						push @{$self->{"LIB"}{$lib}{"fq"}},$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$single1";
@@ -910,11 +911,11 @@ sub runFltAP ($) {
 			}
 		}
 		$fltap_cmd .= "rm *.out\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
-		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+		$fltap_cmd_multi .= "rm *.out ; " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
 		$fltap_cmd .= qq(rm align.mat\n) unless (!defined $align_matrix || -f "align.mat");
-		$fltap_cmd_multi .= qq(rm align.mat && ) unless (!defined $align_matrix || -f "align.mat");
+		$fltap_cmd_multi .= qq(rm align.mat ; ) unless (!defined $align_matrix || -f "align.mat");
 		$fltap_cmd .= "cd ..\n";
-		$fltap_cmd_multi .= "cd .. && ";
+		$fltap_cmd_multi .= "cd .. ; ";
 		$fltap_cmd_multi .= "cd .. ";
 		$multi++;
 		if ($multi % $self->{"CustomSetting:multithreads"}!=0){
@@ -1111,6 +1112,7 @@ sub runBEDtools ($) {
 #                                                       #
 #########################################################
 
+#latest version: 0.7.4-r385
 sub runBWA($$) {
 	my $self=shift;
 	my $ref=shift;
@@ -1780,6 +1782,7 @@ sub runLASTZ($) {
 #                                                       #
 #########################################################
 
+#latest version: 2.5-2-gf57256b
 sub runGATK ($$) {
 	my $self=shift;
 	my $ref=shift;
@@ -1848,32 +1851,32 @@ sub runGATK ($$) {
 				if (defined $MergeSamFiles && $MergeSamFiles ne "") {
 ## Merge BAM 
 					#$callVar_cmd .= qq(mkdir -p ./tmp_merge);
-					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					#$callVar_cmd .= qq(export tmp_merge="./tmpmerge");
-					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					my $MergeSamFilesPara=(exists $self->{"CustomSetting:MergeSamFiles"})?$self->{"CustomSetting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 					$merge_bam=join " INPUT\=",@{$self->{$lib}{"ref-bwabam"}};
 					$callVar_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
 					{
 						$callVar_cmd .= qq(rm -rf ./tmp_merge);
-						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					}
 					$bam="$lib.merge.bam";
 				} else {
 					$merge_bam=join " ",@{$self->{$lib}{"ref-bwabam"}};
 					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					foreach my $bwabam(@{$self->{$lib}{"ref-bwabam"}})
 					{
 						$callVar_cmd .=  qq(\${samtools} view -H $bwabam |grep "^\@RG" >> $lib.inh.sam);
-						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					}
 					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep "^\@PG" >> $lib.inh.sam);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					$callVar_cmd .=  "\${samtools}merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					$bam="$lib.merge.bam";
 				}
 				$self->{$lib}{"$ref-bam"}=qq($self->{"-workdir"}/$self->{"CustomSetting:var_outdir"}/$lib/$lib.merge.bam);
@@ -1881,7 +1884,7 @@ sub runGATK ($$) {
 			elsif (exists $self->{$lib}{"$ref-bwabam"}) {
 				$bam=${$self->{$lib}{"$ref-bwabam"}}[0];
 				#$callVar_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf && vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-				#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 				$self->{$lib}{"$ref-bam"}=${$self->{$lib}{"$ref-bwabam"}}[0];
 			}
 		} else {
@@ -1903,7 +1906,7 @@ sub runGATK ($$) {
 		if (defined $bamtools) {
 			my $fltbam="$1.flt.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			$callVar_cmd .= qq(\${bamtools} filter -isMapped true -isPaired true -in $bam -out $fltbam);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$bam="$lib.merge.flt.bam";
 		}
 ## Remove duplicates
@@ -1916,27 +1919,27 @@ sub runGATK ($$) {
 #  REMOVE_DUPLICATES\=true
 		if (defined $MarkDuplicates && $MarkDuplicates ne "") {
 			#$callVar_cmd .= qq(mkdir -p ./tmp_rmdup);
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			#$callVar_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			my $MarkDuplicatesPara=(exists $self->{"CustomSetting:MarkDuplicates"})?$self->{"CustomSetting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 			my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$callVar_cmd .= qq(\${samtools} index $rmdupbam);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$bam=$rmdupbam;
 			if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
 			{
 				$callVar_cmd .= qq(rm -rf ./tmp_rmdup);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			}
 		}else{
 			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$callVar_cmd .= "\${samtools} index $rmdupbam.bam";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$bam="$rmdupbam.bam";
 		}
 ## Stat
@@ -1948,7 +1951,7 @@ sub runGATK ($$) {
 		if (defined $self->{"software:bamtools"}) {
 				my $stats="$1.stats" if ($bam=~/([^\/\s]+)\.bam/);
 				$callVar_cmd .= qq(\${bamtools} stats -insert -in $bam > $stats\n);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 		} 
 
 		if (defined $gatk) {
@@ -1957,25 +1960,25 @@ sub runGATK ($$) {
 #Samtools calls short indels with local realignment, but it does not write a modified BAM file after the realignment.
 #The GATK though provides such a tool that realigns reads in regions with suspected indel artifacts and generates a BAM with cleaned alignments.
 			#$callVar_cmd .= "mkdir ./tmp_realign";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$callVar_cmd .= qq($gatk -T RealignerTargetCreator -R \$REFERENCE -I $bam -o $lib.gatk.intervals);
 			if (exists $self->{"database:dbSNP"})
 			{
 				$callVar_cmd .= qq( -know \$dbSNP);
 			}
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} ; ) : "\n";
 			my $realignedbam="$1.realigned.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= qq($gatk -T IndelRealigner -R \$REFERENCE -I $bam -o $realignedbam -targetIntervals $lib.gatk.intervals -LOD 0.4 -compress 6 -l INFO);
 			if (exists $self->{"database:dbSNP"})
 			{
 				$callVar_cmd .= qq( -know \$dbSNP);
 			}
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
 			if (defined $self->{"software:bamtools"})
 			{
 				my $stats="$1.stats" if ($realignedbam=~/([^\/\s]+)\.bam/);
 				$callVar_cmd .= qq(\${bamtools} stats -insert -in $realignedbam  > $stats\n);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			}
 			$bam=$realignedbam;
 
@@ -2007,11 +2010,11 @@ sub runGATK ($$) {
 #-knownSites another/optional/setOfSitesToMask.vcf \
 #-o recal_data.grp
 			#$callVar_cmd .= "mkdir ./tmp_covar";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			if (exists $self->{"database:dbSNP"})
 			{
 				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
 
 ## Generate AnlyzeCovariates Plots
 #
@@ -2036,9 +2039,9 @@ sub runGATK ($$) {
 				if (defined $AnalyzeCovariates)
 				{
 					$callVar_cmd .= qq(mkdir analyzeCovar_v1);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 					$callVar_cmd .= qq($AnalyzeCovariates -recalFile $lib.flt.recal_v1.csv -outputDrir analyzeCovar_v1 -ignoreQ 3);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 				}
 
 ##Base Quality Recalibration
@@ -2084,7 +2087,7 @@ sub runGATK ($$) {
 #   -o output.bam
 				my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 				$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
 				$bam = $recalbam;
 
 ## Re-analysis of covariatesDetermine the covariates affecting base quality scores
@@ -2103,15 +2106,15 @@ sub runGATK ($$) {
 # -recalFile $PWDS/${subjectID}.flt.recal_v2.csv  \
 # -L $ExonFile
 				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v2.csv);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} ; ) : "\n";
 			}
 			#else
 			#{
 			#	$callVar_cmd .= qq($gatk -T BaseRecalibrator -I $bam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -o $lib.recalibration_report.grp --intermediate_csv_file $lib.recal.csv --plot_pdf_file $lib.comp.pdf);
-			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			#	my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			#	$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
 			#	$bam = $recalbam;
 			#}
 
@@ -2119,11 +2122,11 @@ sub runGATK ($$) {
 			my $baqbam = "$1.baq.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			$callVar_cmd .= "\${samtools} calmd -Abr $bam \$REFERENCE > $baqbam && \${samtools} index $baqbam";
 			$bam = $baqbam;
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 
 ## Genotyping calling
 			$callVar_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} && ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} ; ) : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
 				my $bgzip;
@@ -2138,7 +2141,7 @@ sub runGATK ($$) {
 					$bgzip=~s/tabix$/bgzip/;
 				}
 				$callVar_cmd .= "$bgzip $lib.gatk.var.vcf";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( && ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
 			}
 
 ##coverage
@@ -2149,7 +2152,7 @@ sub runGATK ($$) {
 			{
 				my $TL=checkPaht($self->{"CustomSetting:TargetIntervalList"});
 				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -L $TL --minMappingQuality 20 -omitLocusTable $lib.Locus.coverage.txt";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			}
 			#$bam=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
@@ -2157,20 +2160,20 @@ sub runGATK ($$) {
 			if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
 			{
 				$callVar_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			}
 		} else {
 			$callVar_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
 		}
 		if (exists $self->{"software:sam2reads"}) {
 			my $name=$1 if ($bam=~/([^\/\s]+).bam/);
 			my $sam2reads=checkPath($self->{"software:sam2reads"});
 			$callVar_cmd .= "\${samtools} view -F 4 $bam | $sam2reads -R1 $name\_mapped.R1.fastq -R2 $name\_mapped.R2.fastq -R3 $name\_mapped.R3.fastq -f fq";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			$callVar_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 		}
 		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 			$callVar_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
@@ -2184,8 +2187,6 @@ sub runGATK ($$) {
 	$callVar_cmd .= "cd ..\n";
 	return $callVar_cmd;
 }
-
-
 
 #/usr/local/bin/dindel --analysis getCIGARindels --bamFile realigned.baq.bam --outputFile dindel_output --ref reference.fa
 #python /usr/local/bin/makeWindows.py --inputVarFile dindel_output.variants.txt --windowFilePrefix realign_windows --numWindowsPerFile 1000
@@ -2234,6 +2235,15 @@ sub runDindle ($) {
 	return $dindle_cmd;
 }
 
+#"A program for annotating and predicting the effects of single nucleotide polymorphisms,SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]
+sub runSnpEff ($) {
+	my $self=shift;
+}
+
+sub runSnpSift ($) {
+	my $self=shift;
+}
+
 #soapsnp -B aln.bam -d reference.fa -o cns -r 0.0005 -e 0.001 -u -L 150 -2 -Q J -s dbSNP -T region.out -m
 #The dbSNP file consist of a lot of lines like this one:
 #	chr1    201979756       1       1       0       0.161   0       0       0.839   rs568
@@ -2245,6 +2255,26 @@ sub runDindle ($) {
 #	any positive values, which only imply what alleles have already been deposited in the database.
 sub runSOAPsnp($) {
 	
+}
+
+sub checkdbSNP {
+	my $dbSNP = shift;
+	my $count=0;
+	open (IN,$dbSNP) || die $!;
+	while(<IN>){
+		next if (/^\#/ || /^\s+/);
+		my @t=split "\t+", $_;
+		for (my $i=1;$i<$#t-1;$i++){
+			$count++ if (/^\d+/);
+		}
+		last;
+	}
+	close IN;
+	if ($count==8){
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 sub runSOAPsnv ($) {
@@ -2640,7 +2670,7 @@ sub runSOAPdenovo ($) {
 		return "";
 	}
 	my $soapdenovo=checkPath($self->{"software:soapdenovo"}) if (exists $self->{"software:soapdenovo"});
-	my $soapdenovo_cmd=qq(echo `date`; echo "run SOAPdenvo|SOAPdenovo-Trans"\n);
+	my $soapdenovo_cmd = qq(echo `date`; echo "run SOAPdenvo|SOAPdenovo-Trans"\n);
 	$soapdenovo_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$soapdenovo_cmd .= qq(export soapdenvo="$soapdenovo"\n);
 	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"}) if (exists $self->{"CustomSetting:soapdenovo_config"});
@@ -2723,6 +2753,56 @@ sub make_config {
 		close OUT;
 		return $config;
 	}
+}
+
+
+#mkdir $directory/qual_dir"
+#mkdir $directory/seq_dir"
+#phred -trim_cutoff 0.01 -trim_alt '' -trim_fasta -id $directory/ -sd $directory/seq_dir/ -qd $directory/qual_dir/"
+sub runPhred ($) {
+	my $self = shift;
+	if (!exists $self->{"software:phred"} && `which phred` eq "") {
+		return "";
+	}
+	my $phred=(exists $self->{"software:phred"})?checkPaht($self->{"software:phred"}):`which phred`;
+	chomp $phred;
+	my $phredpar=$self->{"database:phredpar"} if (exists $self->{"database:phredpar"});
+	my $phred_cmd = qq(export PHRED_PARAMETER_FILE=$phredpar\n) if (defined $phredpar);
+	$phred_cmd .= qq(export phred=$phred\n) if (defined $phred);
+	my $para = (exists $self->{"CustomSetting:phred"}) ? $self->{"CustomSetting:phred"} : qq(-trim_cutoff 0.01 -trim_alt \\'\\' -trim_fasta);
+	$phred_cmd .= qq(export phredpara="$para"\n) if (defined $para);
+	$phred_cmd .= qq(cd $self->{"-workdir"}\n);
+	$phred_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
+	$phred_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$phred_cmd .= qq(cd \${qc_outdir}\n);
+	$phred_cmd .= qq([[ -d phred ]] || mkdir phred\n);
+	$phred_cmd .= qq(cd phred\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		my @dir;
+		if (exists $self->{"LIB"}{$lib}{"sanger"}) {
+			push @dir, ${$self->{"LIB"}{$lib}{"sanger"}}[0];
+		} elsif (exists $self->{"LIB"}{$lib}{"3730"}) {
+			push @dir, ${$self->{"LIB"}{$lib}{"3730"}}[0];
+		} elsif (exists $self->{"LIB"}{$lib}{"ab1"}) {
+			push @dir, ${$self->{"LIB"}{$lib}{"3730"}}[0];
+		}
+		if (@dir > 0) {
+			for my $directory (@dir) {
+				my $dirname = (split /\//,$directory)[-1]; 
+				$phred_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
+				$phred_cmd .= qq(ln -s $directory ; mkdir -p $dirname/qual_dir ; mkdir -p $dirname/seq_dir\n);
+				$phred_cmd .= qq(\${phred} \${phredpara}-id $dirname/ -sd $dirname/seq_dir/ -qd $dirname/qual_dir/\n);
+				$phred_cmd .= qq(cat $dirname/seq_dir/*.seq > $lib.seq\n);
+				$phred_cmd .= qq(cat $dirname/qual_dir/*.qual > $lib.qual\n);
+				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$lib.seq);
+				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$lib.qual);
+				$phred_cmd .= qq(cd ..\n);
+			}
+		}
+	}
+	$phred_cmd .= qq(cd ..\n);
+	return $phred_cmd;
 }
 
 #phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
@@ -3243,7 +3323,7 @@ sub runCRAC($) {
 	$crac_cmd .= qq(export seecerpara="$cracpara"\n);
 	$crac_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
 	$crac_cmd .= qq(cd $self->{"-workdir"}\n);
-	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$crac_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {

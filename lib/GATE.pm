@@ -20,7 +20,7 @@ use GATE::Element;
 #@ISA = qw(GATE::Element GATE::Extension GATE::DO);
 
 
-$VERSION = "1.2a";
+$VERSION = "1.2b";
 
 #-------------------------------------------------------------------------------
 

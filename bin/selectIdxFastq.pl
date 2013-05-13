@@ -184,7 +184,7 @@ if (defined $Stat)
 
 sub check_qual{
 	my $qual=shift;
-	my @q=split //,$qual;
+	my @q=split "",$qual;
 	for (my $i=0;$i<@q;$i++)
 	{
 		return 0 if (ord($q[$i])-33<$Qual);

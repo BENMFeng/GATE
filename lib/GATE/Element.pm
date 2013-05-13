@@ -35,7 +35,7 @@ use lib "$FindBin::Bin/../../lib";
 use File::Basename qw(basename dirname);
 use GATE::DO;
 
-$VERSION = "0.2a";
+$VERSION = "0.2b";
 
 use strict;
 #use GATE::Extension;

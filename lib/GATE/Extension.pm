@@ -39,7 +39,7 @@ use GATE::DO;
 
 use vars qw(@ISA $VERSION @TYPES %TYPES);
 
-$VERSION = "0.1";
+$VERSION = "0.2";
 
 #@ISA=qw(GATE::Element GATE::Extension);
 
