@@ -153,9 +153,7 @@ sub parseDir($) {
 #                                                       #
 #########################################################
 
-#mkdir $directory/qual_dir"
-#mkdir $directory/seq_dir"
-#phred -trim_cutoff 0.01 -trim_alt '' -trim_fasta -id $directory/ -sd $directory/seq_dir/ -qd $directory/qual_dir/"
+#phred_020425
 sub runPhred ($) {
 	my $self = shift;
 	if (!exists $self->{"software:phred"} && `which phred` eq "") {
@@ -206,9 +204,7 @@ sub runPhred ($) {
 	return $phred_cmd if ($gotseq!=0);
 }
 
-#CASAVA_1.8.2/bin/configureBclToFastq.pl --input-dir /share/original/130427_SN483_0332_AC1RYWACXX/Data/Intensities/BaseCalls/ \
-#--output-dir /share/fastq/130427_SN483_0332_AC1RYWACXX/Demultiplexed --sample-sheet /share/sample_sheet/0332_AC1RYWACXX-SS.csv \
-#--fastq-cluster-count 0 --mismatches 1
+#CASAVA_1.8.2
 sub runCASAVA ($) {
 	my $self = shift;
 	my $CASAVA_PATH="";
@@ -423,6 +419,7 @@ sub selectIdxFastq ($) {
 	}
 }
 
+#mergeOverlapPE.pl v0.1.3 alpha 2013-03-20
 sub mergeOverlapPE($) {
 	my $self = shift;
 	if ( (!exists $self->{"software:mergeOverlapPE"} && (!exists $self->{"software:bwa-pemerge"})) || (!exists $self->{'pemerge'}) ) {
