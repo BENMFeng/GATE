@@ -1,7 +1,7 @@
 GATE
 ====
 Bioinformatics Stargate--
-Genomics integrated Applications, also for Transcriptomics, Epigenetics experiential analysis pipeline Mainly situable for illumina sequencing platform
+**G**enomics integrated **A**pplications, also for **T**ranscriptomics, **E**pigenetics experiential analysis pipeline Mainly situable for illumina sequencing platform
 
   Copyright (c) 2012 - 2013 - BENM(Binxiao) Feng                        
   All Rights Reserved                                                   
