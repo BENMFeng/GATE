@@ -97,7 +97,7 @@ GetOptions(
 );
 my $updateLog=qq(
 GATE.pl -- Genomics Applications, also for Transcriptomics & Epgenetics analysis pipeline
-Latest Version: v0.1.6 nightly, May 8th, 2013
+Latest Version: v0.1.7 nightly, May 13th, 2013
 0.1.0 alpha, Sep 12th, 2012
 0.1.0 beta, Sep 20th, 2012
 0.1.1 gamma, Oct 31th, 2012
@@ -106,6 +106,7 @@ Latest Version: v0.1.6 nightly, May 8th, 2013
 0.1.4 nightly, Dec 10th, 2012
 0.1.5 nightly, Mar 18th, 2013
 0.1.6 nightly, May 8th, 2013
+0.1.7 nightly, May 13th, 2013
 );
 my $instruction=qq(
 ## ==>config.example<==
@@ -266,7 +267,7 @@ my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
 qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
 edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
 );
-my @cmd_ary = qw(qc aln var exp diff as peak plot denovo predict fusion phylogen);
+my @cmd_ary = qw(bc qc aln var exp diff as peak plot denovo predict fusion phylogen);
 
 # make jobs submit shell scripts
 #my %custom_cmd = ();

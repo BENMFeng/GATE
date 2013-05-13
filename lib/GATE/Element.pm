@@ -35,7 +35,7 @@ use lib "$FindBin::Bin/../../lib";
 use File::Basename qw(basename dirname);
 use GATE::DO;
 
-$VERSION = "0.2b";
+$VERSION = "0.2c";
 
 use strict;
 #use GATE::Extension;
@@ -60,7 +60,7 @@ sub new ($$;@) {
 
 sub bc($) {
 	my $self=shift;
-	$self->runPhred();
+	$self->runPhred().$self->runCASAVA();
 }
 
 sub qc($) {

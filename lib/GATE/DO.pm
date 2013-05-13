@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9i,05-08-2013";
+$VERSION = "0.9j,05-08-2013";
 package GATE::Element;
 #package GATE::Extension;
 use FindBin qw($Bin $Script);
@@ -190,18 +190,19 @@ sub runPhred ($) {
 			for my $directory (@dir) {
 				my $dirname = (split /\//,$directory)[-1]; 
 				$phred_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
+				$phred_cmd .= qq(cd $lib\n);
 				$phred_cmd .= qq(ln -s $directory ; mkdir -p $dirname/qual_dir ; mkdir -p $dirname/seq_dir\n);
 				$phred_cmd .= qq(\${phred} \${phredpara}-id $dirname/ -sd $dirname/seq_dir/ -qd $dirname/qual_dir/\n);
-				$phred_cmd .= qq(cat $dirname/seq_dir/*.seq > $lib.seq\n);
-				$phred_cmd .= qq(cat $dirname/qual_dir/*.qual > $lib.qual\n);
-				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.seq);
-				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.qual);
+				$phred_cmd .= qq(cat $dirname/seq_dir/*.seq > $lib.$dirname.seq\n);
+				$phred_cmd .= qq(cat $dirname/qual_dir/*.qual > $lib.$dirname.qual\n);
+				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.$dirname.seq);
+				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.$dirname.qual);
 				$phred_cmd .= qq(cd ..\n);
 				$gotseq++;
 			}
 		}
 	}
-	$phred_cmd .= qq(cd ..\n);
+	$phred_cmd .= qq(cd ..\ncd ..\n);
 	return $phred_cmd if ($gotseq!=0);
 }
 
@@ -215,13 +216,41 @@ sub runCASAVA ($) {
 		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVA_PATH'});
 	} elsif (exists $self->{'CustomSetting:CASAVAPATH'}){
 		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVAPATH'});
-	} elsif (exists $self->{'CustomSetting:CASAVA'}){
-		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVA'});
+	} elsif (exists $self->{'software:CASAVA'}){
+		$CASAVA_PATH=checkPath($1) if (/(\S+)\/bin/);
 	}
+	my $para = (exists  $self->{'CustomSetting:CASAVA'}) ? $self->{'CustomSetting:CASAVA'} : '--fastq-cluster-count 0 --mismatches 1'; 
 	my $casava_cmd = qq(echo `date`; echo "run CASAVA"\n);
 	$casava_cmd .= qq(export CASAVA_PATH=$CASAVA_PATH\n) if (defined $CASAVA_PATH);
+	$casava_cmd .= qq(export CASAVA_para="$para"\n);
+	$casava_cmd .= qq([[ -d \${bc_outdir} || mkdir \${bc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}));
+	$casava_cmd .= qq(cd \${bc_outdir}\n);
+	$casava_cmd .= qq([[ -d casava ]] || mkdir casava\n);
+	$casava_cmd .= qq(cd casava\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
-	
+	my $gotseq=0;
+	foreach my $lib(@libraries) {
+		$casava_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
+		$casava_cmd .= qq(cd $lib\n);
+		my @input=@{$self->{'LIB'}{$lib}{"input-dir"}};
+		for (my $i=0;$i<@input;$i++) {
+			my $name;
+			if ($input[$i] =~ /\/([^\/]+)\/Data/) {
+				$name = $1;
+			} else {
+				$name = "$lib.".($i+1);
+			}
+			$casava_cmd .= qq(mkdir $name\n);
+			$casava_cmd .= qq(\${CASAVA_PATH}/bin/configureBclToFastq.pl --input-dir $input[$i] \\\n);
+			$casava_cmd .= qq(--outdir-dir ./$name/Demultiplexed --sample-sheet ./$name/sample_sheet/$name.csv \\\n);
+			$casava_cmd .= qq(\${CASAVA_para}\n);
+			$gotseq++;
+		}
+		$casava_cmd .= qq(cd ..\n);
+	}
+	$casava_cmd .= qq(cd ..\n);
+	$casava_cmd .= qq(cd ..\n);
+	return $casava_cmd if ($gotseq>0);
 }
 
 sub runLifeScope($) {
