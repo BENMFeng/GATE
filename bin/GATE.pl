@@ -29,7 +29,7 @@ use GATE::Element;
 =head1 Name
 
 GATE.pl -- Genomics integrated Applications, also for Transcriptomics, Epigenetics experiential analysis pipeline
-Mainly situable for illumina sequencing platform
+Mainly suitable for illumina sequencing platform
 Bioinformatics Stargate
 
 =head1 Version
