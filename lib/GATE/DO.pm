@@ -2303,46 +2303,54 @@ sub runGATK ($$) {
 #perl -e 'my @f=glob("realign_windows.*.txt");foreach (@f){my $prefix="dindel_stage2_output_windows.$1" if ($_=~/windows\.(\d+)\./);system "/usr/local/bin/dindel --analysis indels --doDiploid --bamFile realigned.baq.bam --ref reference.fa --varFile $_ --libFile dindel_output.libraries.txt --outputFile $prefix";}'
 #ls dindel_stage2_output_windows.*.glf.txt > dindel_stage2_outputfiles.txt
 #python /usr/local/bin/mergeOutputDiploid.py --inputFiles dindel_stage2_outputfiles.txt --outputFile variantCalls.VCF --ref reference.fa 
-sub runDindle ($) {
+sub runDindel ($) {
 	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
-	if (!exists $self->{"software:dindle"}) {
+	if (!exists $self->{"software:dindel"}) {
 		return "";
 	}
-	my $dindle=checkPath($self->{"software:dindle"});
-	my $dindle_cmd = qq(echo `date`; echo "run Dindle"\n);
-	$dindle_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$dindle_cmd .= qq(export dindle=$dindle\n);
-	my $para = $self->{"CustomSetting:dindle"};
-	$dindle_cmd .= qq(export para="$para"\n);
+	my $dindel=checkPath($self->{"software:dindel"});
+	my $dindel_cmd = qq(echo `date`; echo "run dindel"\n);
+	$dindel_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$dindel_cmd .= qq(export dindel=$dindel\n);
+	my $para = $self->{"CustomSetting:dindel"};
+	$dindel_cmd .= qq(export para="$para"\n);
 	my $multithreads = $self->{"CustomSetting:multithreads"};
 	my $multirun = $self->{"CustomSetting:multithreads-run"};
-	$dindle_cmd .= qq(export multirun=$multirun\n);
+	$dindel_cmd .= qq(export multirun=$multirun\n);
 	my $reference = $self->{"database:$ref"};
-	$dindle_cmd .= qq(export REFERENCE=$reference\n);
-	my $dindle_output=(exists $self->{"CustomSetting:dindle_outdir"})?$self->{"CustomSetting:dindle_outdir"}:"dindle";
-	$dindle_cmd .= "[[ -d $dindle_output ]] || mkdir $dindle_output\n";
-	$dindle_cmd .= "cd $dindle_output\n";
+	$dindel_cmd .= qq(export REFERENCE=$reference\n);
+	my $dindel_output=(exists $self->{"CustomSetting:dindel_outdir"})?$self->{"CustomSetting:dindel_outdir"}:"dindel";
+	$dindel_cmd .= "[[ -d $dindel_output ]] || mkdir $dindel_output\n";
+	$dindel_cmd .= "cd $dindel_output\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
 		if (exists $self->{$lib}{"$ref-bam"}) {
-			$dindle_cmd .= "[[ -d $lib ]] || mkdir $lib\n";
-			$dindle_cmd .= "cd $lib\n";
+			$dindel_cmd .= "[[ -d $lib ]] || mkdir $lib\n";
+			$dindel_cmd .= "cd $lib\n";
 			my $bam=$self->{$lib}{"$ref-bam"};
-			$dindle_cmd .= qq(\${dindle} --anlysis getCIGARindels --bamFile $bam --outputFile $lib.dindel_output --ref \${REFERENCE}\n);
-			$dindle_cmd .= qq(makeWindows.py --inputVarFile $lib.dindel_output.variants.txt --windowFilePrefix $lib.realign_windows --numWindowsPerFile 1000\n);
+			$dindel_cmd .= qq(\${dindel} --anlysis getCIGARindels --bamFile $bam --outputFile $lib.dindel_output --ref \${REFERENCE}\n);
+			$dindel_cmd .= qq(makeWindows.py --inputVarFile $lib.dindel_output.variants.txt --windowFilePrefix $lib.realign_windows --numWindowsPerFile 1000\n);
 			#/usr/local/bin/dindel --analysis indels --doDiploid --bamFile realigned.baq.bam --ref reference.fa --varFile $_ --libFile dindel_output.libraries.txt --outputFile $prefix
-			$dindle_cmd .= qq(perl -e \'my \@f=glob\("$lib.realign_windows.*.txt"\););
-			$dindle_cmd .= qq(for\(my \$i=0;\$i<\@f;\$i+=$multithreads\){my \@cmdary=();foreach my \$j\(\$i..\(\$i+$multithreads-1\)\){my \$prefix="$lib.dindel_stage2_output_windows.\$1" if \(\$f[\$i]=~/windows\\.\(\\d+\)\\./\););
-			$dindle_cmd .= qq(push \@cmdary,qq\(\"$dindle --analysis indels --doDiploid --bamFile $bam --ref $reference --varFile \$f[\$i] --libFile $lib.dindel_output.libraries.txt --outputFile \$prefix\"\);}my \$cmd="$multirun ".join " ",\@cmdary;system \$cmd}\'\n);
-			$dindle_cmd .= qq(ls $lib.dindel_stage2_output_windows.*.glf.txt > $lib.dindel_stage2_outputfiles.txt\n);
-			$dindle_cmd .= qq(mergeOutputDiploid.py --inputFiles $lib.dindel_stage2_outputfiles.txt --outputFile $lib.variantCalls.VCF --ref \${REFERENCE}\n);
-			$dindle_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
-			$dindle_cmd .= qq(cd ..\n);
+			$dindel_cmd .= qq(perl -e \'my \@f=glob\("$lib.realign_windows.*.txt"\););
+			$dindel_cmd .= qq(for\(my \$i=0;\$i<\@f;\$i+=$multithreads\){my \@cmdary=();foreach my \$j\(\$i..\(\$i+$multithreads-1\)\){my \$prefix="$lib.dindel_stage2_output_windows.\$1" if \(\$f[\$i]=~/windows\\.\(\\d+\)\\./\););
+			$dindel_cmd .= qq(push \@cmdary,qq\(\"$dindel --analysis indels --doDiploid --bamFile $bam --ref $reference --varFile \$f[\$i] --libFile $lib.dindel_output.libraries.txt --outputFile \$prefix\"\);}my \$cmd="$multirun ".join " ",\@cmdary;system \$cmd}\'\n);
+			$dindel_cmd .= qq(ls $lib.dindel_stage2_output_windows.*.glf.txt > $lib.dindel_stage2_outputfiles.txt\n);
+			$dindel_cmd .= qq(mergeOutputDiploid.py --inputFiles $lib.dindel_stage2_outputfiles.txt --outputFile $lib.variantCalls.VCF --ref \${REFERENCE}\n);
+			$dindel_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+			$dindel_cmd .= qq(cd ..\n);
 		}
 	}
-	return $dindle_cmd;
+	return $dindel_cmd;
+}
+
+#mkdir output
+#./pindel -f demo/hs_ref_chr20.fa -p demo/COLO-829_20-p_ok.txt -c 20 -o output/ref
+#./pindel -f demo/simulated_reference.fa -i demo/simulated_config.txt -c ALL -o output/simulated
+#./pindel -f <reference.fa> -p <pindel_input> [and/or -i bam_configuration_file] -c <chromosome_name> -o <prefix_for_output_files>
+sub runPindel ($) {
+	
 }
 
 #"A program for annotating and predicting the effects of single nucleotide polymorphisms,SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]

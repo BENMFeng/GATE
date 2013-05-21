@@ -11,7 +11,7 @@ while(<HP>)
 {
 	s/\s*$//;
 	my @t=split /\s+/,$_;
-	next if ($t[0] ne $SM);
+	next if ($t[0] !~ /$SM/);
 	for (my $i=3;$i<@t;$i++)
 	{
 		$t[$i]="$1$2" if ($t[$i]=~/(\d+)\.\d+([ACGT])/);
