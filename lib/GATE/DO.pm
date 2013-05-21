@@ -3362,6 +3362,15 @@ sub runEVM ($) {
 
 #########################################################
 #                                                       #
+#                    Find ncRNA                         #
+#                                                       #
+#########################################################
+sub runfindRNA ($) {
+	my $self=shift;
+}
+
+#########################################################
+#                                                       #
 #                    Gene Fusion                        #
 #                                                       #
 #########################################################
@@ -3606,12 +3615,20 @@ sub correctJavaCmd
 {
 	my ($tools,$heap,$Djavaio)=@_;
 	my $cmd="java";
+	my $init="40m";
 	if (defined $tools && $tools !~ /^java/ && $tools !~ /\-jar/)
 	{
 		if (defined $heap)
 		{
-			$heap.="m" if ($heap=~/^\d+$/);
-			$cmd.=" -Xmx$heap";
+			if ($heap=~/(\d+)(\w+)/) {
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10)."unit";
+			} elsif ($heap=~/(\d+)$/) {
+				$heap.="m"
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10).$unit;
+			}
+			$cmd.=" -Xms$init -Xmx$heap";
 		}
 		if (defined $Djavaio)
 		{
@@ -3624,8 +3641,15 @@ sub correctJavaCmd
 		$cmd=$tools;
 		if (defined $heap && $cmd !~ /\-Xmx/)
 		{
-			$heap.="m" if ($heap=~/^\d+$/);
-			$cmd=~s/java/java\ \-Xmx$heap\ /;
+			if ($heap=~/(\d+)(\w+)/) {
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10)."unit";
+			} elsif ($heap=~/(\d+)$/) {
+				$heap.="m"
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10).$unit;
+			}
+			$cmd=~s/java/java\ -Xms$init \-Xmx$heap\ /;
 		}
 		if (defined $Djavaio && $cmd !~ /\-Djava/)
 		{

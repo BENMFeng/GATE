@@ -413,9 +413,11 @@ sub cal_lengc
 {
 	my $string=shift;
 	my $length=length($string);
-	$string=~s/[ATN\-]//g;
+	$string=~s/[Nn\-]//g;
+	my $len_ctg=length($string);
+	$string=~s/[ATat]//g;
 	my $len_gc=length($string);
-	return ($length,$len_gc*100/$length,$len_gc);
+	return ($length,$len_gc*100/$length,$len_ctg);
 }
 
 sub find_match
@@ -433,14 +435,14 @@ sub find_match
 		while($seq=~/($match_seq)/gi)
 		{
 			my $p=$-[0];
-			print ("$name\t$p\t",($p+$Match_len-1),"\t$match_seq\n");
+			print ("$name\t+\t$p\t",($p+$Match_len-1),"\t$match_seq\n");
 		}
 		my $rc_match_seq=reverse($match_seq);
 		$rc_match_seq=~tr/ACGTacgt/TGCAtgca/;
 		while($seq=~/($rc_match_seq)/gi)
 		{
 			my $p=$-[0];
-			print ("$name\t$p\t",($p+$Match_len-1),"\t$match_seq\n");
+			print ("$name\t\-\t$p\t",($p+$Match_len-1),"\t$match_seq\n");
 		}
 	}
 }
