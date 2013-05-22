@@ -15,7 +15,7 @@ Usage: perl $program_name  <command_file|command_line>
 	-verbose	output information of running progress
 	-help		output help information to screen
 Example:
-perl multithreads-run.pl "echo 'hello world';echo '1';sleep 2;echo '2';sleep 1;echo '3'" -nt 2 --verbose
+perl multithreads-run.pl "echo 'hello world';echo '1';sleep 5;ps aux|grep sleep|grep -v grep;echo '2';echo "sleep";sleep 4;ps aux|grep sleep|grep -v grep;echo '3'" -nt 2 --verbose
 
 USAGE
 
@@ -29,6 +29,7 @@ $nt ||= 3;
 
 my $user=`whoami`;
 
+my %pids=();
 my @cmd = ();
 for (my $i=0;$i<@ARGV;$i++) {
 	if (-f $ARGV[$i]) {
@@ -65,7 +66,12 @@ while(@cmd>0) {
 	}
 
 }
-
+while (keys %pids>0) {
+	my $collect;
+	while(($collect = waitpid(-1, WNOHANG)) > 0) {
+		delete $pids{$collect};
+	}
+}
 print STDERR "\tAll processes were accomplishment\n" if $Verbose;
 
 sub runmulti {
@@ -80,6 +86,8 @@ sub runmulti {
 			exec $$cmd_p[$i];
 			exit 0;
 		}
+		#print STDERR "\tpid: $pid\n";
+		$pids{$pid}=1 if (defined $pid && $pid!=0);
 		$kid_proc_num++;
 		#print STDERR "\tkid processes num: $kid_proc_num\n" if $Verbose;
 	}
@@ -88,6 +96,7 @@ sub runmulti {
 			$zombies = 0;
 			my $collect;
 			while(($collect = waitpid(-1, WNOHANG)) > 0) {
+				delete $pids{$collect};
 				$kid_proc_num--;
 			} 
 			if ($kid_proc_num==0) { return $nt }
