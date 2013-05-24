@@ -19,6 +19,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Data::Dumper;
+use Term::ANSIColor;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
 use File::Basename qw(basename dirname);
@@ -27,10 +28,19 @@ use GATE::Element;
 #use GATE::Extension;
 
 =head1 Name
+                                   _____________________________________
+                                   |  ________________________________  |
+                                   | | Bioinformatics Stargate ______ | |
+                                   | |  ____                  |  ___| | |
+                                   | | / ___|__   __  _______ | |___  | |
+                                   | || |  |_ _| /_ \|__   __||  ___| | |
+                                   | || |___| | / __ \  | |   | |___  | |
+                                   | | \____|_|/_/  \_\ |_|   |_____| | |
+                                         
 
-GATE.pl -- Genomics integrated Applications, also for Transcriptomics, Epigenetics experiential analysis pipeline
+GATE.pl -- Genomics integrated Applications, also for Transcriptomics, Epigenetics, 
+Evolution experiential analysis pipeline. 
 Mainly suitable for illumina sequencing platform
-Bioinformatics Stargate
 
 =head1 Version
 
@@ -249,7 +259,8 @@ apoa1.namd >& namd.log
 
 die $updateLog if (defined $Version);
 die $instruction if (defined $Instruction);
-die `pod2text $0` if ((@ARGV==0)||(!defined $Configure)||($Help));
+my $podtext=`pod2text $0`;
+die color ("BOLD WHITE ON_BRIGHT_BLACK"),$podtext,color("reset"),"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
 $Workdir ||= "./";
 $Prefix ||= "pipeline";
 my $gate=GATE->new('-config',$Configure,'-workdir',$Workdir);

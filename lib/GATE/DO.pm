@@ -3628,7 +3628,7 @@ sub correctJavaCmd
 				my ($mem,$unit)=($1,$2);
 				$init=int($mem/10)."unit";
 			} elsif ($heap=~/(\d+)$/) {
-				$heap.="m"
+				$heap.="m";
 				my ($mem,$unit)=($1,$2);
 				$init=int($mem/10).$unit;
 			}
@@ -3649,7 +3649,7 @@ sub correctJavaCmd
 				my ($mem,$unit)=($1,$2);
 				$init=int($mem/10)."unit";
 			} elsif ($heap=~/(\d+)$/) {
-				$heap.="m"
+				$heap.="m";
 				my ($mem,$unit)=($1,$2);
 				$init=int($mem/10).$unit;
 			}
