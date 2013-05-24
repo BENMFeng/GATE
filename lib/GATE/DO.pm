@@ -3365,7 +3365,11 @@ sub runEVM ($) {
 #                    Find ncRNA                         #
 #                                                       #
 #########################################################
-sub runfindRNA ($) {
+sub runtRNAScan ($) {
+	my $self=shift;
+}
+
+sub runInferal ($) {
 	my $self=shift;
 }
 

@@ -14,7 +14,7 @@ Program: use this script to run processes in multiple threads
 Usage: perl $program_name  <command_file|command_line>  
 	-nt <int>	number of threads to use, default=3
 	-q		run job batch queuing mode
-	-m <str>	run in job mark mode
+	-m <str>	run in job break mark mode
 	-verbose	output information of running progress
 	-help		output help information to screen
 Example:
