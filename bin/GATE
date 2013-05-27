@@ -1,0 +1,369 @@
+#!/usr/bin/perl -w
+##########################################################################
+#  Copyright (c) 2012 - 2013 - BENM(Binxiao) Feng                        #
+#  All Rights Reserved                                                   #
+#  Send all comments to BENM - BinxiaoFeng\@gmail.com                     #
+#                                                                        #
+#  This program is free software: you can redistribute it and/or modify  #
+#  it under the terms of the GNU General Public License as published by  #
+#  the Free Software Foundation, either version 3 of the License, or     #
+#  (at your option) any later version.                                   #
+#  This program is distributed in the hope that it will be useful,       #
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of        #
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
+#  GNU General Public License for more details.                          #
+#  You should have received a copy of the GNU General Public License     #
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>. #
+##########################################################################
+use strict;
+use warnings;
+use Getopt::Long;
+use Data::Dumper;
+use Term::ANSIColor;
+use FindBin qw($Bin $Script);
+use lib "$FindBin::Bin/../lib";
+use File::Basename qw(basename dirname);
+use GATE;
+use GATE::Element;
+#use GATE::Extension;
+
+=head1 Name
+                               _____________________________________________
+                                   _____________________________________
+                                   |  ________________________________  |
+                                   | | Bioinformatics Stargate ______ | |
+                                   | |  ____                  |  ___| | |
+                                   | | / ___|__   __  _______ | |___  | |
+                                   | || |  |_ _| /_ \|__   __||  ___| | |
+                                   | || |___| | / __ \  | |   | |___  | |
+                                   | | \____|_|/_/  \_\ |_|   |_____| | |
+                                         
+
+GATE -- Genomics integrated Applications, also for Transcriptomics, Epigenetics, 
+Evolution experiential analysis pipeline. 
+Mainly suitable for illumina sequencing platform
+
+=head1 Version
+
+Author: BENM <binxiaofeng@gmail.com>
+
+Version: v0.1.7 nightly, May 6th, 2013
+
+=head1 Option
+
+  --config=<infile>/-c <infile>	input configure file
+  --workdir=<dir>/-w <dir>	set workdir
+  --prefix=<str>/-p <str>	set output pipeline shell file prefix name, default: pipeline
+  --auto		autorun
+  --version		show update info
+  --instruction		show intruction
+  --verbose		print out run status
+  --debug		print data structure
+  --help		show this info
+
+=head1 Function
+
+    bc			base calling
+    qc			data processing & quality control
+    denovo		de novo assembly
+    predict		repeat masking and gene prediction
+    aln			alignment
+    exp			quantitative analysis
+    diff		differential expression anaylsis
+    as			alternative splicing analysis
+    var			genomic variation/polymorism analysis, inculding SNV/SNP, INDEL, SV
+    peak		find peak for ChIP-Seq
+    *edit		gene editing analysis
+    fusion		gene fusion analysis
+    *ncrna		non-coding RNA analysis
+    *anno		annotation
+    *repeat		repeat finding
+    phylogen		phylogenetics analysis
+    *stat		statistical analysis
+    plot		plot figure
+
+The fuction of which contain "*" in front is not avaiable currently, they are coming soon.
+
+=head1 Example
+
+$ perl bin/GATE.pl qc aln var exp --config=config.txt --prefix=test
+
+=cut
+my %opts;
+my ($Configure,$Verbose,$Workdir,$Prefix,$Auto,$Version,$Instruction,$Debug,$Help);
+GetOptions(
+	\%opts,
+	"config=s"=>\$Configure,
+	"c:s"=>\$Configure,
+	"workdir=s"=>\$Workdir,
+	"w:s"=>\$Workdir,
+	"prefix=s"=>\$Prefix,
+	"p:s"=>\$Prefix,
+	"auto"=>\$Auto,
+	"instruction"=>\$Instruction,
+	"version"=>\$Version,
+	"verbose"=>\$Verbose,
+	"debug"=>\$Debug,
+	"help"=>\$Help
+);
+my $updateLog=qq(
+GATE.pl -- Genomics Applications, also for Transcriptomics & Epgenetics analysis pipeline
+Latest Version: v0.1.7 nightly, May 13th, 2013
+0.1.0 alpha, Sep 12th, 2012
+0.1.0 beta, Sep 20th, 2012
+0.1.1 gamma, Oct 31th, 2012
+0.1.2 nightly, Nov 7th, 2012
+0.1.3 nightly, Nov 24th, 2012
+0.1.4 nightly, Dec 10th, 2012
+0.1.5 nightly, Mar 18th, 2013
+0.1.6 nightly, May 8th, 2013
+0.1.7 nightly, May 13th, 2013
+);
+my $instruction=qq(
+## ==>config.example<==
+-----------------------------------------------------------------
+[database]
+ref=/share/database/hg19.fa
+AP=/home/bio/software/filter_adapter/db/HiSeqAdaptersPrimersForAncientDNALibrary.fa
+lncRNA=/share/database/human_lncrna.fa
+rRNA=/share/database/human_all_rRNA.fasta
+refGene=/share/database/refGene.gtf
+refseq-bed=/share/database/hg19.refseq.bed12
+gencode-gtf=/share/database/gencode.v7.annotation.gtf
+gencode-gc=/share/database/gencode.v7.gc.txt
+genelist=./gene_list.txt
+
+[software]
+## QC software
+selectIdxFastq=/home/bio/pub/GATE/bin/selectIdxFastq.pl
+mergeOverlapPE=/home/bio/pub/GATE/bin/mergeOverlapPE.pl
+filterPCRdup=/home/bio/pub/GATE/bin/filterPCRdup.pl
+scanAP=/home/bio/software/scanAP/scanAP
+trim_seq=/home/bio/pub/GATE/bin/trim_seq.pl
+fastq2pe=/home/bio/pub/GATE/bin/fastq2pe.pl
+fastqcut=/home/bio/pub/GATE/bin/fastqcut.pl
+SolexaQA=/usr/local/bin/SolexaQA.pl
+RNA-SeQC=./software/RNA-SeQC/RNA-SeQC_v1.1.7.jar
+
+## ALN software
+bwa=/usr/local/bin/bwa
+
+# BAMtools
+bamtools=/usr/local/bin/bamtools
+
+## VAR software
+samtools=/usr/local/bin/samtools
+picard=/usr/local/bin/picard-1.82.jar
+gatk=/usr/local/bin/GenomeAnalysisTK.jar
+
+## EXP software
+bowtie=/usr/local/bin/bowtie2
+cufflinks=/usr/local/bin/cufflinks
+tophat=/usr/local/bin/tophat2
+
+## AS software
+AlternativeSplicing=./bin/AlternativeSplicing.jar
+SamToFastq=./bin/SamToFastq.jar
+GenePlot=/home/bio/pub/GATE/bin/GenePlot.pl
+
+[CustomSetting]
+PATH=/home/bio/pub/GATE/bin/:/home/bio/bin/
+RSeQCPATH=/usr/local/bin/
+PYTHONPATH=/usr/local/lib/python2.7/site-packages
+# Java config 
+heap=4g
+# BWA alnpara
+bwaaln=-n 0.05 -e 5 -d 10 -o 3 -l 25 -k 3 -t 12 -M 2
+# TopHat para
+tophat=--solexa-quals -p 10 -r 200 --bowtie2
+# Cufflinks para
+cufflinks=-p 10 -b -u --total-hits-norm
+# BWA aln outdir
+aln_outdir=aln
+# Variation calling outdir
+var_outdir=var
+# scanAP penalty score matrix
+align.mat=/home/bio/software/scanAP/align.mat
+# trim_seq.pl para
+trim_seq=-ap_db \$AP -edge 3 -len_t 25 -len_p 0.25 -trim_mode both -ap_mode -verbose
+# quality control outdir
+qc_outdir=qc
+
+# if 'clean=yes' or 'clean=TRUE' it will clean the interval files
+clean=yes
+
+# PBS jobs parameters
+multimode=yes
+multithreads=2
+qsub=-cwd -q mem.q -P mem -l cpu=8,vf=16G
+
+[LIB]
+LB=A
+ID=A
+SM=hs
+PL=Illumina
+PU=hiseq2000
+fq1=./01.data/A-1.fq.gz
+fq2=../01.data/A-2.fq.gz
+
+[LIB]
+LB=B
+ID=B
+SM=hs
+PL=Illumina
+PI=2000
+PU=hiseq2000
+MergePE=TRUE
+fq1=./01.data/B-1.fq.gz
+fq2=./01.data/B-2.fq.gz
+fq=./01.data/B_SE.fq
+
+[LIB]
+LB=ST
+ID=ST
+SM=mm
+PL=Illumina
+PU=miseq
+Index=CAGT
+fq1=./01.data/C1-1.fq.gz
+fq2=./01.data/C1-2.fq.gz
+fq1=./01.data/C2-1.fq.gz
+fq2=./01.data/C2-2.fq.gz
+fq=./01.data/C_SE1.fq
+fq=./01.data/C_SE2.fq
+
+[INPUT]
+Label=D
+ref-bwabam=./02.aln/D1.bam
+ref-bwabam=./02.aln/D2.bam
+Label=E
+ref-bwabam=./02.aln/E.bam
+
+-----------------------------------------------------------------
+
+## ==> PBS.example <==
+-----------------------------------------------------------------
+#!/bin/bash
+#PBS -N mpi_template
+#PBS -l nodes=1:ppn=10
+#PBS -l walltime=01:40:00
+#PBS -j oe
+#PBS -q mem.q
+NSLOTS=`cat \${PBS_NODEFILE} | wc -l`
+cd  \$PBS_O_WORKDIR
+source /public/software/mpi/openmpi1.3.4-gnu.sh
+mpirun  -hostfile \$PBS_NODEFILE -np \$NSLOTS  \\
+/public/software/namd/namd2.7-gcc-openmpi/namd2 \\
+apoa1.namd >& namd.log
+-----------------------------------------------------------------
+);
+
+die $updateLog if (defined $Version);
+die $instruction if (defined $Instruction);
+my $podtext=`pod2text $0`;
+die color ("BOLD WHITE ON_BRIGHT_BLACK"),$podtext,color("reset"),"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
+$Workdir ||= "./";
+$Prefix ||= "pipeline";
+my $gate=GATE->new('-config',$Configure,'-workdir',$Workdir);
+#print qq(chdir $gate->{'-workdir'}\n);
+$gate->parseDir();
+$gate->parseConfig();
+if (defined $Debug)
+{
+	print "===================== Configure =====================\n";
+	print Dumper $gate;
+}
+
+# parsing command line
+my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
+qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
+edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
+);
+my @cmd_ary = qw(bc qc aln var exp diff as peak plot denovo predict fusion phylogen);
+
+# make jobs submit shell scripts
+#my %custom_cmd = ();
+foreach (@ARGV) {
+	my $cmd = lc($_);
+	if (defined($cmd_hash{$cmd})) {
+		$gate->{'cmd'}{$cmd}=1;
+		#print $gate->$cmd;
+	} else {
+		die("** Unrecognized command $cmd\n");
+	}
+}
+
+
+my ($pipeline,$allwork)=("","");
+foreach my $cmd(@cmd_ary){
+	if (exists $gate->{'cmd'}{$cmd}){
+		next if ($gate->{'cmd'}==0);
+		if ($cmd eq "as" && !exists $gate->{'cmd'}{"aln"}) {
+			print STDERR $gate->get_time();
+			print STDERR "make job submitted shell script for aln\n";
+			my $worksh="$cmd\.$$.sh";
+			open (OUT,">$worksh") || die $!;
+			if (defined $Auto) {
+				print OUT $gate->{"CustomSetting:PBS-header"};
+			}
+			print OUT $gate->aln;
+			print STDERR "make job submitted shell script for $cmd\n";
+			print OUT $gate->$cmd;
+			close OUT;
+			$allwork.=qq(echo \`date\`\necho "run $worksh"\nsh $worksh > $cmd.$$.log 2>&1\n);
+			$allwork.=qq(p=\`ps aux|grep $worksh|grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$worksh is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps aux|grep $worksh|grep -v grep\`\ndone\n);
+			$allwork.=qq(echo \`date\`\necho "$worksh done"\n);
+			#if (defined $Auto) {
+			#	my $qsub_para=$gate->{"CustomSetting:qsub"};
+			#	system "qsub $qsub_para ./$worksh";
+			#}
+			next;
+		}
+		if ($cmd eq "diff" && !exists $gate->{'cmd'}{"exp"}) {
+			print STDERR $gate->get_time();
+			print STDERR "make job submitted shell script for exp\n";
+			my $worksh="$cmd\.$$.sh";
+			open (OUT,">$worksh") || die $!;
+			if (defined $Auto) {
+				print OUT $gate->{"CustomSetting:PBS-header"};
+			}
+			print OUT $gate->exp;
+			print STDERR "make job submitted shell script for $cmd\n";
+			print OUT $gate->$cmd;
+			close OUT;
+			next;
+		}
+		print STDERR $gate->get_time();
+		print STDERR "make jobs submitted shell script for $cmd\n";
+		my $worksh="$cmd\.$$.sh";
+		open (OUT,">$worksh") || die $!;
+		if (defined $Auto) {
+			print OUT $gate->{"CustomSetting:PBS-header"};
+		}
+		print OUT $gate->$cmd;
+		close OUT;
+		$allwork.=qq(echo \`date\`\necho "run $worksh"\nsh $worksh > $cmd.$$.log 2>&1\n);
+		$allwork.=qq(p=\`ps aux|grep $worksh|grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$worksh is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps aux|grep $worksh|grep -v grep\`\ndone\n);
+		$allwork.=qq(echo \`date\`\necho "$worksh done"\n);
+	}
+}
+if (defined $Debug)
+{
+	print "===================== Command configure =====================\n";
+	print Dumper $gate;
+}
+
+$pipeline="$Prefix.$$.sh";
+open (PO,">$pipeline") || die $!;
+my $dir=`pwd`;
+chomp $dir;
+print PO "cd $dir\n";
+print PO $allwork;
+print PO qq(echo "End"\n);
+close PO;
+if (defined $Auto) {
+	my $qsub_para=$gate->{"CustomSetting:qsub"};
+	system "qsub $qsub_para ./$pipeline";
+}
+
+__END__
