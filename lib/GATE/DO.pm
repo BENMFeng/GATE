@@ -1899,10 +1899,13 @@ sub runGATK ($$) {
 	$ref ||= 'ref';
 	my $callVar_cmd = qq(echo `date`; echo "run Samtools-Picard-GATK"\n);
 	$callVar_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference=checkPath($self->{"database:$ref"});
+	$callVar_cmd .= qq(export REFERENCE="$reference"\n);
 	my $heap=$self->{"CustomSetting:heap"};
 	$callVar_cmd .= qq(export heap="$heap"\n);
 	my $samtools = checkPath($self->{"software:samtools"});
 	$callVar_cmd .= qq(export samtools="$samtools"\n);
+	$callVar_cmd .= "\${samtools} faidx \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
 	my $samtools_path=$1 if ($samtools =~ /(\S+)\/samtools/);
 	my ($picard,$picardpath,$MergeSamFiles,$MarkDuplicates,$bamtools);
 	if (defined $samtools_path)
@@ -1922,6 +1925,17 @@ sub runGATK ($$) {
 		$MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
 		$callVar_cmd .= qq(export MarkDuplicates="$MarkDuplicates"\n);
 		$MarkDuplicates=correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
+		if (defined $picard) {
+			my $dict=checkIndex('picard',$reference);
+			if ($dict==0) {
+				my $CreateSequenceDictionary="";
+				my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+				$CreateSequenceDictionary=(exists $self->{"software:CreateSequenceDictionary"})?$self->{"software:CreateSequenceDictionary"}:qq($picardpath/CreateSequenceDictionary.jar);
+				$CreateSequenceDictionary=correctJavaCmd($CreateSequenceDictionary,"\${heap}");
+				my $ref_prefix=$1 if ($reference=~/([^\/\s]+)\.fa/i);
+				$callVar_cmd .= "$CreateSequenceDictionary R=\$REFERENCE O=$ref_prefix\.dict CREATE_INDEX=true CREATE_MD5_FILE=true TRUNCATE_NAMES_AT_WHITESPACE=true VALIDATION_STRINGENCY=STRICT\n";
+			}
+		}
 	}
 	if (defined $self->{"software:bamtools"})
 	{
@@ -1931,8 +1945,6 @@ sub runGATK ($$) {
 	my $gatk=checkPath($self->{"software:gatk"}) if (exists $self->{"software:gatk"});
 	$gatk=correctJavaCmd($gatk,$heap,"./tmp_gatk");
 	$callVar_cmd .= qq(export gatk="$gatk"\n);
-	my $reference=checkPath($self->{"database:$ref"});
-	$callVar_cmd .= qq(export REFERENCE="$reference"\n);
 	if (exists $self->{"database:dbSNP"})
 	{
 		$callVar_cmd .=qq(export dbSNP="$self->{"database:dbSNP"}"\n);
@@ -1944,7 +1956,6 @@ sub runGATK ($$) {
 	$callVar_cmd .= qq(cd \${workdir}\n);
 	$callVar_cmd .= qq([[ -d \${vardir} ]] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
 	$callVar_cmd .= qq(cd \${vardir}\n);
-	$callVar_cmd .= "\${samtools} index -a bwtsw \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $multi=0;
 	foreach my $lib(@libraries) {
@@ -3608,6 +3619,14 @@ sub checkIndex($$) {
 			return 0;
 		} elsif ($db =~ /bam$/ && !-f "$db.bai") {
 			print STDERR get_time()."\t\tno bwa index for $db\n";
+			return 0;
+		} else {
+			return 1;
+		}
+	} elsif ($soft eq "picard") {
+		my $prefix=$1 if ($db=~/(\S+)\.fa/);
+		if ($db=~/fa/i && !-f "$db.dict" && -f "$prefix.dict") {
+			print STDERR get_time()."\t\tno picard index for $db\n";
 			return 0;
 		} else {
 			return 1;

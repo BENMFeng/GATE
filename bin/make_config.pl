@@ -11,7 +11,7 @@ use FindBin qw($Bin $Script);
 my ($path,$clone,$pattern,$sm,$index,$barcode,$Help);
 my %opts;
 GetOptions(\%opts,"path:s"=>\$path,"clone:s"=>\$clone,"pattern:s"=>\$pattern,"sm:s"=>\$sm,"index:s"=>\$index,"barcode:s"=>\$barcode,"help"=>\$Help);
-die qq(perl $0 <-p input_data_dir> [-clone example_config] [-pattern "_R1_:_R2_"] [-sm sample_list.txt] [-index index.list] [-barcode C]\n) if (!defined $path || $Help);
+die qq(perl $0 <-path input_data_dir> [-clone example_config] [-pattern "_R1_:_R2_"] [-sm sample_list.txt] [-index index.list] [-barcode C]\n) if (!defined $path || $Help);
 
 $path=~s/\/$//;
 my ($R1,$R2)=split /[\:\-]/,$pattern;
