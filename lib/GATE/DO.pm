@@ -1903,6 +1903,8 @@ sub runGATK ($$) {
 	$callVar_cmd .= qq(export REFERENCE="$reference"\n);
 	my $heap=$self->{"CustomSetting:heap"};
 	$callVar_cmd .= qq(export heap="$heap"\n);
+	my $multi=$self->{"CustomSetting:multithreads"};
+	$callVar_cmd .= qq(export multithreads=$multi\n);
 	my $samtools = checkPath($self->{"software:samtools"});
 	$callVar_cmd .= qq(export samtools="$samtools"\n);
 	$callVar_cmd .= "\${samtools} faidx \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
@@ -2272,7 +2274,11 @@ sub runGATK ($$) {
 			if (exists $self->{"CustomSetting:TargetIntervalList"})
 			{
 				my $TL=checkPaht($self->{"CustomSetting:TargetIntervalList"});
-				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -L $TL --minMappingQuality 20 -omitLocusTable $lib.Locus.coverage.txt";
+				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 4 -ct 6 -ct 10 -pt readgroup --omitLocusTable true --omitIntervalStatistics=true";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			} else {
+				#my $output_prefix = $1 if ($bam=~/([^\/\s]+)\.bam/i);
+				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 4 -ct 6 -ct 10 -pt readgroup --omitIntervalStatistics=true";
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
 			}
 			#$bam=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
