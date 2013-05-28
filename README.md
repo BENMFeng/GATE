@@ -1,5 +1,5 @@
 GATE
--![alt text](https://raw.github.com/BENMFeng/GATE/master/GATE.gif "Frustrated cat can't believe this is the 12th time he's clicked on an auto-linked README.md URL")
+[alt text](https://raw.github.com/BENMFeng/GATE/master/GATE.gif "I'm king of the world!")
 ====
 Bioinformatics Stargate--
 **G**enomics integrated **A**pplications, also for **T**ranscriptomics, **E**pigenetics, Evolution experiential analysis pipeline Mainly suitable for illumina sequencing platform
