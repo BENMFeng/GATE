@@ -86,7 +86,7 @@ The fuction of which contain "*" in front is not avaiable currently, they are co
 
 =head1 Example
 
-$ perl bin/GATE.pl qc aln var exp --config=config.txt --prefix=test
+$ bin/GATE qc aln var exp --config=config.txt --prefix=test
 
 =cut
 my %opts;
