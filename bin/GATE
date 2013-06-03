@@ -19,7 +19,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Data::Dumper;
-use Term::ANSIColor;
+#use Term::ANSIColor;
 use FindBin qw($Bin $Script);
 use lib "$FindBin::Bin/../lib";
 use File::Basename qw(basename dirname);
@@ -261,7 +261,8 @@ apoa1.namd >& namd.log
 die $updateLog if (defined $Version);
 die $instruction if (defined $Instruction);
 my $podtext=`pod2text $0`;
-die color ("BOLD WHITE ON_BRIGHT_BLACK"),$podtext,color("reset"),"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
+#die color ("BOLD WHITE ON_BRIGHT_BLACK"),$podtext,color("reset"),"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
+die $podtext,"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
 $Workdir ||= "./";
 $Prefix ||= "pipeline";
 my $gate=GATE->new('-config',$Configure,'-workdir',$Workdir);

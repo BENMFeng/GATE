@@ -2,7 +2,7 @@
 
 #GATE
 ====
-Bioinformatics Stargate--
+Bioinformatics Stargate --
 **G**enomics integrated **A**pplications, also for **T**ranscriptomics, **E**pigenetics, Evolution experiential analysis pipeline Mainly suitable for illumina sequencing platform
 
   Copyright (c) 2012 - 2013 - BENM(Binxiao) Feng                        
@@ -15,5 +15,5 @@ GATE is an integrative PERL pacakge to conduct application for bioinformatics an
 
 User need to setup the software you need, and create an config file for running GATE. GATE would generate a pipeline bash shell script for you to run on Linux server or submit to PBS(qsub/bsub).
 
-Exmaple: perl bin/GATE.pl --config=config.txt --prefix=test qc aln var
+Exmaple: bin/GATE --config=config.txt --prefix=test qc aln var
 

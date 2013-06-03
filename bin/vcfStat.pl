@@ -1,7 +1,9 @@
 #!/usr/bin/perl -w
 use strict;
 
-my @vcf=glob("*.vcf");
+my @vcf=();
+@vcf=glob("*.vcf") if (@ARGV==0);
+@vcf=@ARGV if (@ARGV>0);
 
 my @sub=("G->A","A->G","T->C","C->T","C->A","T->A","C->G","T->G","A->C","G->C","A->T","G->T");
 my %Snp;

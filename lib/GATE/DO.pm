@@ -38,7 +38,7 @@ sub parseConfig($) {
 	while(<IN>) {
 		chomp;
 		next if ($_ eq "" || $_=~/^\#/);
-		if (/\[(.*)\]/) {
+		if (/[\[\<](.*)[\]\>]/) {
 			$name=$1;
 			if ($name eq "LIB")
 			{
@@ -477,17 +477,16 @@ sub mergeOverlapPE($) {
 						$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{'fq'}}-1}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
 					}
 					$withPE++;
+					if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
+					{
+						$mop_cmd_multi .= " &\n";
+					} else {
+						$mop_cmd_multi .= "\n";
+					}
 				}
 			}
 			$mop_cmd .= "cd ..\n";
-			$mop_cmd_multi .= "cd .. ; ";
-			$mop_cmd_multi .= "cd ..";
-			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
-			{
-				$mop_cmd_multi .= " &\n";
-			} else {
-				$mop_cmd_multi .= "\n";
-			}
+			$mop_cmd_multi .= "cd ..\ncd ..\n";
 		}
 		$mop_cmd .= "cd ..\n";
 		if ($withPE>0){
@@ -571,7 +570,7 @@ sub mergeOverlapPE($) {
 		if ($withPE>0){
 			if (exists $self->{"CustomSetting:multimode"}) {
 				chomp $mop_cmd_multi;
-				$mop_cmd_multi =~ s/\&+$//;
+				$mop_cmd_multi =~ s/\s+\&+$//;
 				$mop_cmd_multi .= "\n";
 				$mop_cmd_multi .= print_check_process('mergeOverlapPE');
 				return $mop_cmd_multi;
@@ -722,7 +721,7 @@ sub runQA($) {
 		$qa_cmd .= "cd ..\n";
 		if (exists $self->{"CustomSetting:multimode"} && $self->{"CustomSetting:multimode"} =~ /y/i) {
 			chomp $qa_cmd_multi;
-			$qa_cmd_multi=~s/\&+$//;
+			$qa_cmd_multi=~s/\s\&+$//;
 			$qa_cmd_multi.="\n";
 			return $qa_cmd_multi;
 		} else {
@@ -1038,7 +1037,7 @@ sub runFltAP ($) {
 	$fltap_cmd .= "cd ..\n";
 	if (exists $self->{"CustomSetting:multimode"}) {
 		chomp $fltap_cmd_multi;
-		$fltap_cmd_multi=~s/\&+$//;
+		$fltap_cmd_multi=~s/\s\&+$//;
 		$fltap_cmd_multi.="\n";
 		$fltap_cmd_multi.=print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
 		return $fltap_cmd_multi;
@@ -1903,8 +1902,8 @@ sub runGATK ($$) {
 	$callVar_cmd .= qq(export REFERENCE="$reference"\n);
 	my $heap=$self->{"CustomSetting:heap"};
 	$callVar_cmd .= qq(export heap="$heap"\n);
-	my $multi=$self->{"CustomSetting:multithreads"};
-	$callVar_cmd .= qq(export multithreads=$multi\n);
+	my $multi_t=$self->{"CustomSetting:multithreads"};
+	$callVar_cmd .= qq(export multithreads=$multi_t\n);
 	my $samtools = checkPath($self->{"software:samtools"});
 	$callVar_cmd .= qq(export samtools="$samtools"\n);
 	$callVar_cmd .= "\${samtools} faidx \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
@@ -2249,7 +2248,8 @@ sub runGATK ($$) {
 
 ## Genotyping calling
 			$callVar_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} ; ) : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -ct $self->{"CustomSetting:multithreads"} -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} ; ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
 				my $bgzip;
@@ -3369,6 +3369,15 @@ sub runGeneScan ($) {
 	
 }
 
+#PASA in the Context of a Complete Eukaryotic Annotation Pipeline
+#(A) ab initio gene finding using a selection of the following software tools: GeneMarkHMM, FGENESH, Augustus, and SNAP, GlimmerHMM.
+#(B) protein homology detection and intron resolution using the GeneWise software and the uniref90 non-redundant protein database.
+#(C) alignment of known ESTs, full-length cDNAs, and most recently, Trinity RNA-Seq assemblies to the genome using GMAP
+#(D) PASA alignment assemblies based on overlapping transcript alignments from step ( C)
+#(E) use of EVidenceModeler (EVM) to compute weighted consensus gene structure annotations based on the above (A, B, C, D)
+#(F) use of PASA to update the EVM consensus predictions, adding UTR annotations and models for alternatively spliced isoforms (leveraging D and E).
+#(G) limited manual refinement of genome annotations (F) using Argo or Apollo
+
 sub runPASA ($) {
 	my $self=shift;
 }
@@ -3631,7 +3640,7 @@ sub checkIndex($$) {
 		}
 	} elsif ($soft eq "picard") {
 		my $prefix=$1 if ($db=~/(\S+)\.fa/);
-		if ($db=~/fa/i && !-f "$db.dict" && -f "$prefix.dict") {
+		if ($db=~/fa/i && !-f "$db.dict" && !-f "$prefix.dict") {
 			print STDERR get_time()."\t\tno picard index for $db\n";
 			return 0;
 		} else {
@@ -3651,12 +3660,13 @@ sub correctJavaCmd
 		{
 			if ($heap=~/(\d+)(\w+)/) {
 				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10)."unit";
+				$init=int($mem/10)."$unit";
 			} elsif ($heap=~/(\d+)$/) {
 				$heap.="m";
 				my ($mem,$unit)=($1,$2);
 				$init=int($mem/10).$unit;
 			}
+			$init="40m" if ($init =~ /^0/);
 			$cmd.=" -Xms$init -Xmx$heap";
 		}
 		if (defined $Djavaio)
@@ -3678,6 +3688,7 @@ sub correctJavaCmd
 				my ($mem,$unit)=($1,$2);
 				$init=int($mem/10).$unit;
 			}
+			$init="40m" if ($init =~ /^0/);
 			$cmd=~s/java/java\ -Xms$init \-Xmx$heap\ /;
 		}
 		if (defined $Djavaio && $cmd !~ /\-Djava/)
