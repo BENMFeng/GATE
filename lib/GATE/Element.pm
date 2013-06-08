@@ -108,7 +108,7 @@ sub denovo($) {
 	$self->runTrinity().$self->runVelvetOases().$self->runSOAPdenovo();
 }
 
-sub predict($) {
+sub abinito($) {
 	my $self=shift;
 	$self->runGenomeThreader().$self->runGeneMark();
 }

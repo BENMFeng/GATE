@@ -1489,7 +1489,7 @@ sub runBWA($$) {
 						}
 						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
 						$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000  $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
+						$bwa_cmd .= "\${samtools} sort -\@ 8 -m 3G  $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.single.$k.rmdup.sort.bam\n";
 						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.$k.rmdup.sort.bam";
 					} else {
@@ -1707,7 +1707,7 @@ sub runBowtie($$) {
 				}
 				$bowtie_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
 				$bowtie_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam\n";
-				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort - $lib.merge.rmdup.sort\n";
+				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort -@ 8 -m 1G - $lib.merge.rmdup.sort\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
 				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
@@ -2423,6 +2423,7 @@ sub runSOAPsv ($) {
 sub runBreakDancer ($) {
 	
 }
+
 
 #########################################################
 #                                                       #

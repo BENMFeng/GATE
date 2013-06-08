@@ -66,7 +66,7 @@ Version: v0.1.7 nightly, May 6th, 2013
     bc			base calling
     qc			data processing & quality control
     denovo		de novo assembly
-    predict		repeat masking and gene prediction
+    abinito		repeat masking and gene prediction
     aln			alignment
     exp			quantitative analysis
     diff		differential expression anaylsis
@@ -276,11 +276,11 @@ if (defined $Debug)
 }
 
 # parsing command line
-my %cmd_hash = (denovo=>\&denovo, predict=>\&predict,
+my %cmd_hash = (denovo=>\&denovo, abinito=>\&abinito,
 qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
 edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
 );
-my @cmd_ary = qw(bc qc aln var exp diff as peak plot denovo predict fusion phylogen);
+my @cmd_ary = qw(bc qc aln var exp diff as peak plot denovo abinito fusion phylogen);
 
 # make jobs submit shell scripts
 #my %custom_cmd = ();
