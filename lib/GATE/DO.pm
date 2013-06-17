@@ -1101,6 +1101,34 @@ sub runRSeQC ($) {
 	return ($rseqc_cmd);
 }
 
+sub runFastQC ($) {
+	
+}
+
+sub runFastX ($) {
+	
+}
+
+sub runTagDust ($) {
+	
+}
+
+sub ESTclean ($) {
+	
+}
+
+sub runRC454 ($) {
+	
+}
+
+sub runECHO ($) {
+	
+}
+
+sub runLucy ($) {
+	
+}
+
 sub runRNASeqQC ($) {
 ##RNA-SeQC can be run with or without a BWA-based rRNA level estimation mode.
 ##To run without (less accurate, but faster) use the command:
@@ -1873,8 +1901,29 @@ sub runBLAST ($) {
 	
 }
 
+#psLayout version 3
+#match  mis-    rep.    N's     Q gap   Q gap   T gap   T gap   strand  Q               Q       Q       Q       T               T       T       T       block   blockSizes      qStarts  tStarts
+#       match   match           count   bases   count   bases           name            size    start   end     name            size    start   end     count
+#---------------------------------------------------------------------------------------------------------------------------------------------------------------
 sub runBLAT ($) {
-	
+	my $self = shift;
+	my $ref = shift;
+	$ref ||= 'ref';
+	my $blat = checkPath($self->{"software:blat"});
+	if (!defiined $blat) {
+		return "";
+	}
+	my $blat_cmd = qq(echo `date`; echo "run blat"\n);
+	$blat_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference = checkPath($self->{"database:$ref"});
+	$blat_cmd .= qq(export REFERENCE="$reference"\n);
+	$blat_cmd .= qq(export blat="$blat"\n);
+	my $blatpara = $self->{'CustomSetting:blat'};
+	$blat_cmd .= qq(export blatpara="$blatpara"\n);
+	my $workdir=checkPath($self->{"-workdir"});
+	$blat_cmd .= qq(export workdir="$workdir"\n);
+	$blat_cmd .= qq(cd \${workdir}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
 }
 
 sub runLAST($) {
@@ -2894,6 +2943,18 @@ sub make_config {
 
 #phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
 sub runPhrap ($) {
+	
+}
+
+sub runPhusion ($) {
+	
+}
+
+sub runPAGIT ($) {
+	
+}
+
+sub runREAPR ($) {
 	
 }
 

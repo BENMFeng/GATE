@@ -25,10 +25,10 @@ close IN;
 my $aver_cov=$sum_all/$sum_sig;
 my %cov_gt=("1"=>0,"2"=>0,"4"=>0,"5"=>0,"10"=>0,"20"=>0,"30"=>0,"40"=>0,"50"=>0,);
 my $out_data1="$prefix.coverage_plot.out";
-my $out_data2="poisson_plot.txt";
+my $out_data2="$prefix.poisson_plot.txt";
 open O,">$out_data1" || die "Can't open the file:$!\n";
 open O2,">$out_data2" || die "Can't open the file:$!\n";
-foreach (sort keys %cov_sigbase){
+foreach (sort{$a<=>$b} keys %cov_sigbase){
 	$cov_sample{$_}=$cov_sigbase{$_}/$sum_sig;
 	$cov_sample_sd{$_}=($_-$aver_cov)*($_-$aver_cov)*$cov_sample{$_};
 	$cov_possion{$_}=&poisson($_,$aver_cov);
@@ -102,5 +102,5 @@ open O1,">$prefix.Rscript.R" || die "Can't open the file:$!\n";
 print O1 "$Rscript";
 close O1;
 system("Rscript $prefix.Rscript.R");
-system("rm $prefix.Rscript.R $prefix.poisson_plot.txt");
+#system("rm $prefix.Rscript.R $prefix.poisson_plot.txt");
 
