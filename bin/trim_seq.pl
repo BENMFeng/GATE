@@ -42,10 +42,10 @@ Update: v2.1 Apr-16-2013
 );
 
 die $usage if ((@ARGV==0)||($Help));
-#reads_id reads_len reads_start reads_end AP_id AP_len AP_start AP_end align_len mismatch gap
-#HWI-EAS59:1:1:384:318#0/1	40	6	17	PE_Adapter1-5'+	33	2	13	11	0	0
-#HWI-EAS59:1:2:1645:544#0/1	40	30	40	PE_Adapter1-5'+	33	3	13	10	0	0
-#HWI-EAS59:1:1:992:104#0/1	40	13	24	PE_Adapter1-5'+	33	0	11	11	0	0
+#reads_id reads_len reads_start reads_end AP_id AP_len AP_start AP_end align_len mismatch gap strand
+#HWI-EAS59:1:1:384:318#0/1	40	6	17	PE_Adapter1-5'+	33	2	13	11	0	0	+
+#HWI-EAS59:1:2:1645:544#0/1	40	30	40	PE_Adapter1-5'+	33	3	13	10	0	0	+
+#HWI-EAS59:1:1:992:104#0/1	40	13	24	PE_Adapter1-5'+	33	0	11	11	0	0	+
 
 $Edge ||= 2;
 $Len_p ||= 0.5;
