@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "0.9j,05-08-2013";
+$VERSION = "1.0,06-21-2013";
 package GATE::Element;
 #package GATE::Extension;
 use FindBin qw($Bin $Script);
@@ -268,10 +268,16 @@ sub selectIdxFastq ($) {
 	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || (!exists $self->{'idx'} && !exists $self->{'bar'})) {
 		return "";
 	}
-	my $selectIdxFastq=$self->{"software:selectIdxFastq"};
+	my $selectIdxFastq=checkPath($self->{"software:selectIdxFastq"});
 	my $para=(exists $self->{"CustomSetting:selectIdxFastq"})?$self->{"CustomSetting:selectIdxFastq"}:"-mis 1 -qual 30";
 	$para=~s/\-.+prefix\s+\S+//;
+	my $multirun=checkPath($self->{"CustomSetting:multithreads-run"}) if (exists $self->{"CustomSetting:multithreads-run"});
+	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/selectIdxFastq.$$.sh");
 	my $Idx_cmd = qq(echo `date`; echo "run selectIdxFastq"\n);
+	if (defined $multirun) {
+		open (IDX,">$multirun_sh");
+		$Idx_cmd .= qq(export multirun="$multirun"\n);
+	}
 	$Idx_cmd .= qq(cd $self->{"-workdir"}\n);
 	$Idx_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$Idx_cmd .= qq(export selectIdxFastq=$selectIdxFastq\n);
@@ -285,11 +291,19 @@ sub selectIdxFastq ($) {
 	foreach my $lib(@libraries) {
 		next if (!exists $self->{'idx'}{$lib} && !exists $self->{'bar'}{$lib});
 		$Idx_cmd_multi .= $Idx_cmd_multi_head;
-		$Idx_cmd .= qq(echo `date`; echo "$lib"\n);
+		$Idx_cmd .= qq(echo `date` && echo "$lib"\n);
 		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-		$Idx_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$Idx_cmd_multi .= qq(echo `date` && echo "$lib" && [[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		if (defined $multirun) {
+			print IDX qq(echo `date` && echo "$lib" && );
+			print IDX qq([[ -d $lib ]] || mkdir $lib && cd $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			print IDX qq(cd $lib && );
+		}
 		$Idx_cmd .= "cd $lib\n";
-		$Idx_cmd_multi .= "cd $lib ; ";
+		$Idx_cmd_multi .= "cd $lib\n";
+		if (defined $multirun) {
+			print IDX "cd $lib && ";
+		}
 		for my $lbmark(sort keys %{$self->{"LIB"}{$lib}}) {
 			my ($lb,$i)=($1,$2) if ($lbmark=~/^(\w+)([12])/);
 			$lb=$lbmark if (!defined $lb);
@@ -352,7 +366,13 @@ sub selectIdxFastq ($) {
 						$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq1 $reads1 -fastq2 $reads2);
 						$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
 						$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $barcode);
-						$Idx_cmd_multi .= qq( ; );
+						$Idx_cmd_multi .= qq( && );
+						if (defined $multirun) {
+							print IDX qq($selectIdxFastq $para -fastq1 $reads1 -fastq2 $reads2);
+							print IDX qq( -index $index ) if (defined $index);
+							print IDX qq( -barcode $barcode ) if (defined $barcode);
+							print IDX qq( && );
+						}
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2));
 						${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
@@ -386,7 +406,13 @@ sub selectIdxFastq ($) {
 							$Idx_cmd_multi .= qq(\${selectIdxFastq} \${selectIdxFastq_para} -fastq $reads1 );
 							$Idx_cmd_multi .= qq( -index $index ) if (defined $index);
 							$Idx_cmd_multi .= qq( -barcode $barcode ) if (defined $barcode);
-							$Idx_cmd_multi .= qq( ; );
+							$Idx_cmd_multi .= qq( && );
+							if (defined $multirun) {
+								print IDX qq($selectIdxFastq $para -fastq );
+								print IDX qq( -index $index ) if (defined $index);
+								print IDX qq( -barcode $barcode ) if (defined $barcode);
+								print IDX qq( && );
+							}
 							die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
 							${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
 							$withIdx++;
@@ -396,14 +422,21 @@ sub selectIdxFastq ($) {
 			}
 		}
 		$Idx_cmd .= "cd ..\n";
-		$Idx_cmd_multi .= "cd .. ; ";
-		$Idx_cmd_multi .= "cd .. ";
+		$Idx_cmd_multi .=~ s/\s+$//;
+		$Idx_cmd_multi .=~ s/\&\&$//;
 		if ($withIdx % $self->{"CustomSetting:multithreads"}!=0)
 		{
 			$Idx_cmd_multi .= " &\n";
 		} else {
 			$Idx_cmd_multi .= "\n";
 		}
+		$Idx_cmd_multi .= "cd ..\ncd ..\n";
+		if (defined $multirun) {
+			print IDX "cd ..\n";
+		}
+	}
+	if (defined $multirun){
+		close IDX;
 	}
 	$Idx_cmd .= "cd ..\n";
 	if ($withIdx>0){
@@ -412,7 +445,14 @@ sub selectIdxFastq ($) {
 			$Idx_cmd_multi=~s/\&+$//;
 			$Idx_cmd_multi.="\n";
 			$Idx_cmd_multi.=print_check_process('selectIdxFastq');
-			return $Idx_cmd_multi;
+			if (defined $multirun) {
+				my $multirun_cmd=$Idx_cmd_multi_head;
+				$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"CustomSetting:multithreads"}\n);
+				$multirun_cmd .= print_check_process('selectIdxFastq');
+				return $multirun_cmd;
+			} else {
+				return $Idx_cmd_multi;
+			}
 		}else{
 			return $Idx_cmd;
 		}
@@ -429,6 +469,12 @@ sub mergeOverlapPE($) {
 		my $mergeOverlapPE=$self->{"software:mergeOverlapPE"};
 		my $moppara = $self->{"CustomSetting:mergeOverlapPE"};
 		my $mop_cmd = qq(echo `date`; echo "run mergeOverlapPE"\n);
+		my $multirun=checkPath($self->{"CustomSetting:multithreads-run"}) if (exists $self->{"CustomSetting:multithreads-run"});
+		my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/mergeOverlapPE.$$.sh");
+		if (defined $multirun) {
+			open (MOP,">$multirun_sh");
+			$mop_cmd .= qq(export multirun="$multirun"\n);
+		}
 		$mop_cmd .= qq(cd $self->{"-workdir"}\n);
 		$mop_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 		$mop_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
@@ -444,6 +490,11 @@ sub mergeOverlapPE($) {
 			$mop_cmd .= qq(echo `date`; echo "$lib"\n);
 			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			if (defined $multirun) {
+				print MOP qq(echo `date` && echo "$lib" && );
+				print MOP qq([[ -d $lib ]] || mkdir $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+				print MOP qq(cd $lib && );
+			}
 			$mop_cmd .= "cd $lib\n";
 			$mop_cmd_multi .= "cd $lib ; ";
 			my %fq=getlibSeq($self->{"LIB"}{$lib});
@@ -468,7 +519,10 @@ sub mergeOverlapPE($) {
 				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara\n";
-					$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara ; ";
+					$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
+					if (defined $multirun) {
+						print MOP "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
+					}
 					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
 					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
 					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
@@ -487,15 +541,26 @@ sub mergeOverlapPE($) {
 			}
 			$mop_cmd .= "cd ..\n";
 			$mop_cmd_multi .= "cd ..\ncd ..\n";
+			if (defined $multirun) {
+				print MOP "cd ..\n";
+			}
 		}
 		$mop_cmd .= "cd ..\n";
+		close MOP if (defined $multirun);
 		if ($withPE>0){
 			if (exists $self->{"CustomSetting:multimode"}) {
 				chomp $mop_cmd_multi;
 				$mop_cmd_multi =~ s/\&+$//;
 				$mop_cmd_multi .= "\n";
 				$mop_cmd_multi .= print_check_process('mergeOverlapPE');
-				return $mop_cmd_multi;
+				if (defined $multirun) {
+					my $multirun_cmd = $mop_cmd_multi_head;
+					$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"CustomSetting:multithreads"}\n);
+					$multirun_cmd .= print_check_process('mergeOverlapPE');
+					return $multirun_cmd;
+				} else {
+					return $mop_cmd_multi;
+				}
 			}else{
 				return $mop_cmd;
 			}
@@ -520,7 +585,7 @@ sub mergeOverlapPE($) {
 			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$mop_cmd .= "cd $lib\n";
-			$mop_cmd_multi .= "cd $lib ; ";
+			$mop_cmd_multi .= "cd $lib\n";
 			my %fq=getlibSeq($self->{"LIB"}{$lib});
 			my @Reads1=();
 			@Reads1=@{$fq{1}} if (exists $fq{1});
@@ -543,9 +608,9 @@ sub mergeOverlapPE($) {
 				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$bwapemerge $moppara -m $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq\n";
-					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq ; );
+					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq && );
 					$mop_cmd .= qq($bwapemerge $moppara -u $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}'\n);
-					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' ; );
+					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' && );
 					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
 					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
 					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
@@ -557,14 +622,15 @@ sub mergeOverlapPE($) {
 				}
 			}
 			$mop_cmd .= "cd ..\n";
-			$mop_cmd_multi .= "cd .. ; ";
-			$mop_cmd_multi .= "cd ..";
+			$mop_cmd_multi =~ s/\s+$//;
+			$mop_cmd_multi =~ s/\&\&$//;
 			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
 			{
 				$mop_cmd_multi .= " &\n";
 			} else {
 				$mop_cmd_multi .= "\n";
 			}
+			$mop_cmd_multi .= "cd ..\ncd ..\n";
 		}
 		$mop_cmd .= "cd ..\n";
 		if ($withPE>0){
@@ -608,7 +674,7 @@ sub runQA($) {
 			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
-			$qa_cmd_multi .= "cd $lib ; ";
+			$qa_cmd_multi .= "cd $lib\n";
 			$qa_cmd_multi .= "mkdir QA ; " if ($para !~ /\-d/);
 			for my $i(sort keys %{$self->{"LIB"}{$lib}}) {
 				if (exists $self->{"LIB"}{$lib}{$i}) {
@@ -620,32 +686,31 @@ sub runQA($) {
 							if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/QA/$fq))
 							{
 								$qa_cmd .= "gzip -cd $reads > $fq\n";
-								$qa_cmd_multi .= "gzip -cd $fq ; ";
+								$qa_cmd_multi .= "gzip -cd $fq && ";
 							}
 							$qa_cmd .= "$SolexaQA $fq ";
 							$qa_cmd .= ($para=~/\-d/) ? " $para\n" : "$para -d QA\n";
 							$qa_cmd_multi .= "$SolexaQA $fq ";
-							$qa_cmd_multi .= ($para=~/\-d/) ? " $para ; " : "$para -d QA ; ";
+							$qa_cmd_multi .= ($para=~/\-d/) ? " $para && " : "$para -d QA && ";
 						} else {
 							$qa_cmd .= "ln -s $reads\n";
 							$qa_cmd .= "$SolexaQA $reads ";
 							$qa_cmd .= ($para=~/\-d/) ? "$para\n" : "$para -d QA\n";
-							$qa_cmd_multi .= "ln -s $reads ; ";
+							$qa_cmd_multi .= "ln -s $reads && ";
 							$qa_cmd_multi .= "$SolexaQA $reads ";
-							$qa_cmd_multi .= ($para=~/\-d/) ? " $para ; " : "$para -d QA ; ";
+							$qa_cmd_multi .= ($para=~/\-d/) ? " $para && " : "$para -d QA && ";
 						}
 					}
 				}
 			}
 			$qa_cmd .= "cd ..\n";
-			$qa_cmd_multi .= "cd .. ; ";
-			$qa_cmd_multi .= "cd .. ";
-			$multi++;
 			if ($multi % $self->{"CustomSetting:multithreads"}!=0){
 				$qa_cmd_multi .= "&\n";
 			}else{
 				$qa_cmd_multi .= "\n";
 			}
+			$qa_cmd_multi .= "cd ..\ncd ..\n";
+			$multi++;
 		}
 		$qa_cmd .= "cd ..\n";
 		if (exists $self->{"CustomSetting:multimode"} && $self->{"CustomSetting:multimode"} =~ /y/i) {
@@ -869,7 +934,13 @@ sub runFltAP ($) {
 	my $AP=checkPath($self->{"database:AP"});
 	my $trim_seq=checkPath($self->{"software:trim_seq"}) if (exists $self->{"software:trim_seq"});
 	my $trim_seq_para=$self->{"CustomSetting:trim_seq"};
+	my $multirun=checkPath($self->{"CustomSetting:multithreads-run"}) if (exists $self->{"CustomSetting:multithreads-run"});
+	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/runFltAP.$$.sh");
 	my $fltap_cmd = qq(echo `date`; echo "run scanAP"\n);
+	if (defined $multirun) {
+		open (FLA,">$multirun_sh");
+		$fltap_cmd .= qq(export multirun="$multirun"\n);
+	}
 	$fltap_cmd .=qq(cd $self->{"-workdir"}\n);
 	$fltap_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	$fltap_cmd .= qq(export AP=$AP\n);
@@ -881,15 +952,19 @@ sub runFltAP ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib (@libraries) {
 		$fltap_cmd_multi .= $fltap_cmd_multi_head;
-		$fltap_cmd_multi .= qq(echo `date`; echo "$lib"\n);
-		$fltap_cmd .= qq(echo `date`; echo "$lib"\n);
+		$fltap_cmd_multi .= qq(echo `date` && echo "$lib"\n);
+		$fltap_cmd .= qq(echo `date` && echo "$lib"\n);
 		$fltap_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$fltap_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 		$fltap_cmd .= "cd $lib\n";
-		$fltap_cmd_multi .= "cd $lib ; ";
+		$fltap_cmd_multi .= "cd $lib && ";
 		$fltap_cmd .= qq(cp $align_matrix ./\n) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
-		$fltap_cmd_multi .=  qq(cp $align_matrix ./ ; ) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
-		
+		$fltap_cmd_multi .=  qq(cp $align_matrix ./ && ) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
+		if (defined $multirun) {
+			print FLA qq(echo `date` && echo "$lib" && ); 
+			print FLA qq([[ -d $lib ]] || mkdir $lib && )unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			print FLA qq(cd $lib && );
+		}
 		my %Reads;
 		foreach my $i(sort keys %{$self->{"LIB"}{$lib}}) {
 			my ($reads1,$reads2,$filter1,$filter2)=("","","","");
@@ -902,7 +977,12 @@ sub runFltAP ($) {
 					if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$fq))
 					{
 						$fltap_cmd .= "gzip -cd $reads > $fq\n" if ($reads=~/gz$/);
-						$fltap_cmd_multi .= "gzip -cd $reads > $fq ; " if ($reads=~/gz$/);
+						if ($reads=~/gz$/){
+							$fltap_cmd_multi .= "gzip -cd $reads > $fq && ";
+							if (defined $multirun) {
+								print FLA "gzip -cd $reads > $fq && ";
+							}
+						}
 					}
 				}
 				
@@ -914,21 +994,33 @@ sub runFltAP ($) {
 				if ( ( (!exists $self->{"CustomSetting:reuse"}) || (exists $self->{"CustomSetting:reuse"} && $self->{"CustomSetting:reuse"} =~/N/i) ) && !-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$detail))
 				{
 					$fltap_cmd .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para\n";
-					$fltap_cmd_multi .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para ; ";
+					$fltap_cmd_multi .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para && ";
+					if (defined $multirun) {
+						print FLA "$scanAP -i $fq -a \$AP -s $stat -d $detail $para && ";
+					}
 				}
 				$fltap_cmd .= "$trim_seq $trim_seq_para -trim_detail $detail $fq\n" if (exists $self->{"software:trim_seq"});
-				$fltap_cmd_multi .= "$trim_seq $trim_seq_para -trim_detail $detail $fq  ; " if (exists $self->{"software:trim_seq"});
+				$fltap_cmd_multi .= "$trim_seq $trim_seq_para -trim_detail $detail $fq  && " if (exists $self->{"software:trim_seq"});
+				if (defined $multirun) {
+					print FLA "$trim_seq $trim_seq_para -trim_detail $detail $fq  && " if (exists $self->{"software:trim_seq"});
+				}
 				my $prefix=$1 if ($fqname=~/(\S+)\.[^\.\s]+$/);
 				if (defined $fastqcut)
 				{
 					$fltap_cmd .= "$fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq\n";
-					$fltap_cmd_multi .= " $fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq ; ";
+					$fltap_cmd_multi .= "$fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq && ";
+					if (defined $multirun) {
+						print FLA "$fastqcut $fqname.trim.out $fastqcut_para -prefix $fqname > $prefix.clean.fastq && ";
+					}
 					push @{$Reads{$i}},["$prefix.clean.fastq","$fqname.filter.out $fqname.qcut.out"];
 				}
 				else
 				{
 					$fltap_cmd .= "mv $fqname.trim.out $prefix.clean.fastq\n";
-					$fltap_cmd_multi .= " mv $fqname.trim.out $prefix.clean.fastq ; ";
+					$fltap_cmd_multi .= "mv $fqname.trim.out $prefix.clean.fastq && ";
+					if (defined $multirun) {
+						print FLA "mv $fqname.trim.out $prefix.clean.fastq && ";
+					}
 					push @{$Reads{$i}},["$prefix.clean.fastq","$fqname.filter.out"];
 				}
 				#push @{$self->{"LIB"}{"$sm-clean"}{$i}},$self->{"-workdir"}."/QC/$sm/$prefix.clean.fastq";
@@ -959,8 +1051,12 @@ sub runFltAP ($) {
 						$single2=~s/fastq$/single.fastq/i;
 						$fltap_cmd .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2\n";
 						$fltap_cmd .= "rm $reads1 $reads2\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
-						$fltap_cmd_multi .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 ; ";
-						$fltap_cmd_multi .= "rm $reads1 $reads2 ; " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+						$fltap_cmd_multi .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
+						$fltap_cmd_multi .= "rm $reads1 $reads2 && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+						if (defined $multirun) {
+							print FLA "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
+							print FLA "rm $reads1 $reads2 && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+						}
 						${$self->{"LIB"}{$lib}{"$lb$i"}}[$p]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$pair1";
 						${$self->{"LIB"}{$lib}{"$lb$j"}}[$p]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$pair2";
 						push @{$self->{"LIB"}{$lib}{"fq"}},$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$single1";
@@ -1020,18 +1116,23 @@ sub runFltAP ($) {
 			}
 		}
 		$fltap_cmd .= "rm *.out\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
-		$fltap_cmd_multi .= "rm *.out ; " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+		if (defined $multirun) {
+			print FLA "rm *.out && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+			print FLA "cd ..\n";
+		}
 		$fltap_cmd .= qq(rm align.mat\n) unless (!defined $align_matrix || -f "align.mat");
-		$fltap_cmd_multi .= qq(rm align.mat ; ) unless (!defined $align_matrix || -f "align.mat");
+		$fltap_cmd_multi .= qq(rm align.mat && ) unless (!defined $align_matrix || -f "align.mat");
 		$fltap_cmd .= "cd ..\n";
-		$fltap_cmd_multi .= "cd .. ; ";
-		$fltap_cmd_multi .= "cd .. ";
 		$multi++;
+		$fltap_cmd_multi =~ s/\s+$//;
+		$fltap_cmd_multi =~ s/\&\&$//;
 		if ($multi % $self->{"CustomSetting:multithreads"}!=0){
 			$fltap_cmd_multi .= "&\n";
 		} else {
 			$fltap_cmd_multi .= "\n";
 		}
+		$fltap_cmd_multi .= "cd ..\ncd ..\n";
 	}
 	
 	$fltap_cmd .= "cd ..\n";
@@ -1039,8 +1140,15 @@ sub runFltAP ($) {
 		chomp $fltap_cmd_multi;
 		$fltap_cmd_multi=~s/\s\&+$//;
 		$fltap_cmd_multi.="\n";
-		$fltap_cmd_multi.=print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
-		return $fltap_cmd_multi;
+		$fltap_cmd_multi.= print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
+		if (defined $multirun) {
+			my $multirun_cmd = $fltap_cmd_multi_head;
+			$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"CustomSetting:multithreads"}\n);
+			$multirun_cmd .= print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
+			return $multirun_cmd;
+		} else {
+			return $fltap_cmd_multi;
+		}
 	} else {
 		return $fltap_cmd;
 	}
