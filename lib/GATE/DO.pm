@@ -271,8 +271,8 @@ sub selectIdxFastq ($) {
 	my $selectIdxFastq=checkPath($self->{"software:selectIdxFastq"});
 	my $para=(exists $self->{"CustomSetting:selectIdxFastq"})?$self->{"CustomSetting:selectIdxFastq"}:"-mis 1 -qual 30";
 	$para=~s/\-.+prefix\s+\S+//;
-	my $multirun=checkPath($self->{"CustomSetting:multithreads-run"}) if (exists $self->{"CustomSetting:multithreads-run"});
-	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/selectIdxFastq.$$.sh");
+	my $multirun=checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/selectIdxFastq.$$.sh);
 	my $Idx_cmd = qq(echo `date`; echo "run selectIdxFastq"\n);
 	if (defined $multirun) {
 		open (IDX,">$multirun_sh");
@@ -285,7 +285,7 @@ sub selectIdxFastq ($) {
 	$Idx_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
 	$Idx_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
 	my $Idx_cmd_multi_head=$Idx_cmd;
-	my $Idx_cmd_multi="";
+	my $Idx_cmd_multi = "";
 	my $withIdx=0;
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -297,13 +297,9 @@ sub selectIdxFastq ($) {
 		if (defined $multirun) {
 			print IDX qq(echo `date` && echo "$lib" && );
 			print IDX qq([[ -d $lib ]] || mkdir $lib && cd $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-			print IDX qq(cd $lib && );
 		}
 		$Idx_cmd .= "cd $lib\n";
 		$Idx_cmd_multi .= "cd $lib\n";
-		if (defined $multirun) {
-			print IDX "cd $lib && ";
-		}
 		for my $lbmark(sort keys %{$self->{"LIB"}{$lib}}) {
 			my ($lb,$i)=($1,$2) if ($lbmark=~/^(\w+)([12])/);
 			$lb=$lbmark if (!defined $lb);
@@ -422,8 +418,10 @@ sub selectIdxFastq ($) {
 			}
 		}
 		$Idx_cmd .= "cd ..\n";
-		$Idx_cmd_multi .=~ s/\s+$//;
-		$Idx_cmd_multi .=~ s/\&\&$//;
+		if (defined $Idx_cmd_multi){
+			$Idx_cmd_multi =~ s/\s+$//;
+			$Idx_cmd_multi =~ s/\&\&$//;
+		}
 		if ($withIdx % $self->{"CustomSetting:multithreads"}!=0)
 		{
 			$Idx_cmd_multi .= " &\n";
@@ -469,8 +467,8 @@ sub mergeOverlapPE($) {
 		my $mergeOverlapPE=$self->{"software:mergeOverlapPE"};
 		my $moppara = $self->{"CustomSetting:mergeOverlapPE"};
 		my $mop_cmd = qq(echo `date`; echo "run mergeOverlapPE"\n);
-		my $multirun=checkPath($self->{"CustomSetting:multithreads-run"}) if (exists $self->{"CustomSetting:multithreads-run"});
-		my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/mergeOverlapPE.$$.sh");
+		my $multirun=checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+		my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/mergeOverlapPE.$$.sh);
 		if (defined $multirun) {
 			open (MOP,">$multirun_sh");
 			$mop_cmd .= qq(export multirun="$multirun"\n);
@@ -549,7 +547,7 @@ sub mergeOverlapPE($) {
 		close MOP if (defined $multirun);
 		if ($withPE>0){
 			if (exists $self->{"CustomSetting:multimode"}) {
-				chomp $mop_cmd_multi;
+				$mop_cmd_multi =~ s/\s+$//;
 				$mop_cmd_multi =~ s/\&+$//;
 				$mop_cmd_multi .= "\n";
 				$mop_cmd_multi .= print_check_process('mergeOverlapPE');
@@ -934,8 +932,8 @@ sub runFltAP ($) {
 	my $AP=checkPath($self->{"database:AP"});
 	my $trim_seq=checkPath($self->{"software:trim_seq"}) if (exists $self->{"software:trim_seq"});
 	my $trim_seq_para=$self->{"CustomSetting:trim_seq"};
-	my $multirun=checkPath($self->{"CustomSetting:multithreads-run"}) if (exists $self->{"CustomSetting:multithreads-run"});
-	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/runFltAP.$$.sh");
+	my $multirun=checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/runFltAP.$$.sh);
 	my $fltap_cmd = qq(echo `date`; echo "run scanAP"\n);
 	if (defined $multirun) {
 		open (FLA,">$multirun_sh");
@@ -2491,7 +2489,7 @@ sub runDindel ($) {
 	my $para = $self->{"CustomSetting:dindel"};
 	$dindel_cmd .= qq(export para="$para"\n);
 	my $multithreads = $self->{"CustomSetting:multithreads"};
-	my $multirun = $self->{"CustomSetting:multithreads-run"};
+	my $multirun = $self->{"software:multithreads-run"};
 	$dindel_cmd .= qq(export multirun=$multirun\n);
 	my $reference = $self->{"database:$ref"};
 	$dindel_cmd .= qq(export REFERENCE=$reference\n);
