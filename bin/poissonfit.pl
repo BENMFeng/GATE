@@ -121,6 +121,7 @@ poissonfit=data.frame\(x=rep\(1:$tentimes,times=$col_num\)/10,y=c\($DATA3\),c=re
 ggplot\(data=bardata,aes\(x,y,fill=factor\(c\)\)\)\+
   geom_bar\(stat="identity",position="dodge",\)\+
   scale_x_continuous\(breaks=c\(1:$num\)\)\+
+  opts\(axis.text.x = theme_text\(angle = 90, hjust = 1,size = 10\)\)+
   geom_line\(data=poissonfit,aes\(color=factor\(c\)\),size=1\)\+
 ggsave\(filename="./$prefix.poisson.png"\)
 );

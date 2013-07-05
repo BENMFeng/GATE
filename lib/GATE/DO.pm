@@ -2128,32 +2128,32 @@ sub runGATK ($$) {
 				if (defined $MergeSamFiles && $MergeSamFiles ne "") {
 ## Merge BAM 
 					#$callVar_cmd .= qq(mkdir -p ./tmp_merge);
-					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					#$callVar_cmd .= qq(export tmp_merge="./tmpmerge");
-					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					my $MergeSamFilesPara=(exists $self->{"CustomSetting:MergeSamFiles"})?$self->{"CustomSetting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 					$merge_bam=join " INPUT\=",@{$self->{$lib}{"ref-bwabam"}};
 					$callVar_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
 					{
 						$callVar_cmd .= qq(rm -rf ./tmp_merge);
-						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					}
 					$bam="$lib.merge.bam";
 				} else {
 					$merge_bam=join " ",@{$self->{$lib}{"ref-bwabam"}};
 					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					foreach my $bwabam(@{$self->{$lib}{"ref-bwabam"}})
 					{
 						$callVar_cmd .=  qq(\${samtools} view -H $bwabam |grep "^\@RG" >> $lib.inh.sam);
-						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					}
 					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep "^\@PG" >> $lib.inh.sam);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					$callVar_cmd .=  "\${samtools}merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					$bam="$lib.merge.bam";
 				}
 				$self->{$lib}{"$ref-bam"}=qq($self->{"-workdir"}/$self->{"CustomSetting:var_outdir"}/$lib/$lib.merge.bam);
@@ -2183,7 +2183,7 @@ sub runGATK ($$) {
 		if (defined $bamtools) {
 			my $fltbam="$1.flt.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			$callVar_cmd .= qq(\${bamtools} filter -isMapped true -isPaired true -in $bam -out $fltbam);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$bam="$lib.merge.flt.bam";
 		}
 ## Remove duplicates
@@ -2202,21 +2202,21 @@ sub runGATK ($$) {
 			my $MarkDuplicatesPara=(exists $self->{"CustomSetting:MarkDuplicates"})?$self->{"CustomSetting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 			my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= qq(\${samtools} index $rmdupbam);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$bam=$rmdupbam;
 			if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
 			{
 				$callVar_cmd .= qq(rm -rf ./tmp_rmdup);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 		}else{
 			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= "\${samtools} index $rmdupbam.bam";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$bam="$rmdupbam.bam";
 		}
 ## Stat
@@ -2228,7 +2228,7 @@ sub runGATK ($$) {
 		if (defined $self->{"software:bamtools"}) {
 				my $stats="$1.stats" if ($bam=~/([^\/\s]+)\.bam/);
 				$callVar_cmd .= qq(\${bamtools} stats -insert -in $bam > $stats\n);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 		} 
 
 		if (defined $gatk) {
@@ -2250,12 +2250,12 @@ sub runGATK ($$) {
 			{
 				$callVar_cmd .= qq( -know \$dbSNP);
 			}
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			if (defined $self->{"software:bamtools"})
 			{
 				my $stats="$1.stats" if ($realignedbam=~/([^\/\s]+)\.bam/);
 				$callVar_cmd .= qq(\${bamtools} stats -insert -in $realignedbam  > $stats\n);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 			$bam=$realignedbam;
 
@@ -2291,7 +2291,7 @@ sub runGATK ($$) {
 			if (exists $self->{"database:dbSNP"})
 			{
 				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 
 ## Generate AnlyzeCovariates Plots
 #
@@ -2316,9 +2316,9 @@ sub runGATK ($$) {
 				if (defined $AnalyzeCovariates)
 				{
 					$callVar_cmd .= qq(mkdir analyzeCovar_v1);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					$callVar_cmd .= qq($AnalyzeCovariates -recalFile $lib.flt.recal_v1.csv -outputDrir analyzeCovar_v1 -ignoreQ 3);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 				}
 
 ##Base Quality Recalibration
@@ -2364,7 +2364,7 @@ sub runGATK ($$) {
 #   -o output.bam
 				my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 				$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 				$bam = $recalbam;
 
 ## Re-analysis of covariatesDetermine the covariates affecting base quality scores
@@ -2383,7 +2383,7 @@ sub runGATK ($$) {
 # -recalFile $PWDS/${subjectID}.flt.recal_v2.csv  \
 # -L $ExonFile
 				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v2.csv);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} ; ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
 			}
 			#else
 			#{
@@ -2399,12 +2399,12 @@ sub runGATK ($$) {
 			my $baqbam = "$1.baq.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			$callVar_cmd .= "\${samtools} calmd -Abr $bam \$REFERENCE > $baqbam && \${samtools} index $baqbam";
 			$bam = $baqbam;
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 
 ## Genotyping calling
 			$callVar_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
 			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -ct $self->{"CustomSetting:multithreads"} -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} ; ) : "\n";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
 				my $bgzip;
@@ -2419,7 +2419,7 @@ sub runGATK ($$) {
 					$bgzip=~s/tabix$/bgzip/;
 				}
 				$callVar_cmd .= "$bgzip $lib.gatk.var.vcf";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 
 ##coverage
@@ -2430,11 +2430,11 @@ sub runGATK ($$) {
 			{
 				my $TL=checkPaht($self->{"CustomSetting:TargetIntervalList"});
 				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 4 -ct 6 -ct 10 -pt readgroup --omitLocusTable true --omitIntervalStatistics=true";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			} else {
 				#my $output_prefix = $1 if ($bam=~/([^\/\s]+)\.bam/i);
 				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 4 -ct 6 -ct 10 -pt readgroup --omitIntervalStatistics=true";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 			#$bam=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
@@ -2442,20 +2442,20 @@ sub runGATK ($$) {
 			if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
 			{
 				$callVar_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 		} else {
 			$callVar_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
 		}
 		if (exists $self->{"software:sam2reads"}) {
 			my $name=$1 if ($bam=~/([^\/\s]+).bam/);
 			my $sam2reads=checkPath($self->{"software:sam2reads"});
 			$callVar_cmd .= "\${samtools} view -F 4 $bam | $sam2reads -R1 $name\_mapped.R1.fastq -R2 $name\_mapped.R2.fastq -R3 $name\_mapped.R3.fastq -f fq";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 		}
 		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 			$callVar_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
