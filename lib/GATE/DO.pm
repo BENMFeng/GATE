@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.0,06-21-2013";
+$VERSION = "1.1,07-16-2013";
 package GATE::Element;
 #package GATE::Extension;
 use FindBin qw($Bin $Script);
@@ -3455,6 +3455,8 @@ sub runGenePlot ($) {
 # java -Xmx2000m jar scripture.jar -task addpairs <Mandatory parameters>
 ## Score task
 # java -Xmx2000m -jar scripture.jar -task score <Mandatory parameters>
+
+#dot -Tps chr1.segments.bed.dot -o chr1.ps
 sub runScripture ($) {
 	my $self = shift;
 	my $ref = shift;
@@ -3470,6 +3472,7 @@ sub runScripture ($) {
 	$scripture=correctJavaCmd($scripture,$heap,"./tmp_scripture");
 	my $para = $self->{"CustomSetting:scripture"} if (exists $self->{"CustomSetting:scripture"});
 	$scripture_cmd .= qq(export scripture="$scripture"\n);
+	$scripture_cmd .= qq(export para="$para"\n);
 	my $multi_t=$self->{"CustomSetting:multithreads"};
 	$scripture_cmd .= qq(export multithreads=$multi_t\n);
 	my $samtools = checkPath($self->{"software:samtools"});
@@ -3477,6 +3480,9 @@ sub runScripture ($) {
 	my $which=`which igvtools`;chomp $which;
 	my $igvtools=(-f $which && -e $which) ? $which : checkPath($self->{"software:igvtools"});
 	$scripture_cmd .= qq(export igvtools="$igvtools"\n);
+	my $dot=`which dot`;chomp $dot;
+	$dot=checkPath($self->{"software:dot"}) if (exists $self->{"software:dot"});
+	$scripture_cmd .= qq(export dot="$dot"\n);
 	my $workdir=checkPath($self->{"-workdir"});
 	$scripture_cmd .= qq(export workdir="$workdir"\n);
 	$scripture_cmd .= qq(cd \${workdir}\n);
@@ -3502,8 +3508,8 @@ sub runScripture ($) {
 		my $tophatsam = "$1.sam" if ($tophatbam=~/(\S+)\.bam$/);
 		$scripture_cmd .= qq(\${samtools} view $tophatbam > $tophatsam && );
 		$scripture_cmd .= qq(\${igvtools} index $tophatsam && );
-		$scripture_cmd .= qq(\${scripture} -alignment $tophatsam -out $lib.segments.txt -sizeFile $reference.size  -chrSequences \${REFERENCE});
-		$scripture_cmd .= qq( $para ) if (defined $para);
+		$scripture_cmd .= qq(\${scripture} -alignment $tophatsam -out $lib.segments.txt -sizeFile $reference.size -chrSequences \${REFERENCE});
+		$scripture_cmd .= qq( \${para}) if (defined $para);
 		if ($multi % $multi_t==0) {
 			$scripture_cmd .= "\n";
 		}
