@@ -494,7 +494,7 @@ sub mergeOverlapPE($) {
 				print MOP qq(cd $lib && );
 			}
 			$mop_cmd .= "cd $lib\n";
-			$mop_cmd_multi .= "cd $lib ; ";
+			$mop_cmd_multi .= "cd $lib && ";
 			my %fq=getlibSeq($self->{"LIB"}{$lib});
 			my @Reads1=();
 			@Reads1=@{$fq{1}} if (exists $fq{1});
@@ -673,7 +673,7 @@ sub runQA($) {
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
 			$qa_cmd_multi .= "cd $lib\n";
-			$qa_cmd_multi .= "mkdir QA ; " if ($para !~ /\-d/);
+			$qa_cmd_multi .= "mkdir QA && " if ($para !~ /\-d/);
 			for my $i(sort keys %{$self->{"LIB"}{$lib}}) {
 				if (exists $self->{"LIB"}{$lib}{$i}) {
 					my $j=0;
@@ -744,8 +744,8 @@ sub runQA($) {
 			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
-			$qa_cmd_multi .= "cd $lib ; ";
-			$qa_cmd_multi .= "mkdir QA ; " if ($para !~ /\-d/);
+			$qa_cmd_multi .= "cd $lib && ";
+			$qa_cmd_multi .= "mkdir QA && " if ($para !~ /\-d/);
 			for my $i(sort keys %{$self->{"LIB"}{$lib}}) {
 				if (exists $self->{"LIB"}{$lib}{$i}) {
 					my $j=0;
@@ -756,23 +756,23 @@ sub runQA($) {
 							if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/QA/$fq))
 							{
 								$qa_cmd .= "gzip -cd $reads > $fq\n";
-								$qa_cmd_multi .= "gzip -cd $fq ; ";
+								$qa_cmd_multi .= "gzip -cd $fq && ";
 							}
 							$qa_cmd .= "\${check_fastq} -i $fq ";
 							$qa_cmd .= (defined $para) ? " $para > $fq.fqcheck\n" : " > $fq.fqcheck\n";
 							$qa_cmd_multi .= "\${check_fastq} -i $fq ";
-							$qa_cmd_multi .= (defined $para) ? " $para > $fq.fqcheck ; " : " > $fq.fqcheck ; ";
+							$qa_cmd_multi .= (defined $para) ? " $para > $fq.fqcheck && " : " > $fq.fqcheck && ";
 							if (defined $distribute_fqcheck)
 							{
 								$qa_cmd .= qq(\${distribute_fqcheck} $fq.fqcheck -o $fq.fqcheck\n);
-								$qa_cmd_multi .= qq(\${distribute_fqcheck} $fq.fqcheck -o $fq.fqcheck ; );
+								$qa_cmd_multi .= qq(\${distribute_fqcheck} $fq.fqcheck -o $fq.fqcheck && );
 							}
 						}
 					}
 				}
 			}
 			$qa_cmd .= "cd ..\n";
-			$qa_cmd_multi .= "cd .. ; ";
+			$qa_cmd_multi .= "cd .. && ";
 			$qa_cmd_multi .= "cd .. ";
 			$multi++;
 			if ($multi % $self->{"CustomSetting:multithreads"}!=0){
@@ -2161,7 +2161,7 @@ sub runGATK ($$) {
 			elsif (exists $self->{$lib}{"$ref-bwabam"}) {
 				$bam=${$self->{$lib}{"$ref-bwabam"}}[0];
 				#$callVar_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf && vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-				#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+				#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 				$self->{$lib}{"$ref-bam"}=${$self->{$lib}{"$ref-bwabam"}}[0];
 			}
 		} else {
@@ -2196,9 +2196,9 @@ sub runGATK ($$) {
 #  REMOVE_DUPLICATES\=true
 		if (defined $MarkDuplicates && $MarkDuplicates ne "") {
 			#$callVar_cmd .= qq(mkdir -p ./tmp_rmdup);
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			#$callVar_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			my $MarkDuplicatesPara=(exists $self->{"CustomSetting:MarkDuplicates"})?$self->{"CustomSetting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 			my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
@@ -2237,13 +2237,13 @@ sub runGATK ($$) {
 #Samtools calls short indels with local realignment, but it does not write a modified BAM file after the realignment.
 #The GATK though provides such a tool that realigns reads in regions with suspected indel artifacts and generates a BAM with cleaned alignments.
 			#$callVar_cmd .= "mkdir ./tmp_realign";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= qq($gatk -T RealignerTargetCreator -R \$REFERENCE -I $bam -o $lib.gatk.intervals);
 			if (exists $self->{"database:dbSNP"})
 			{
 				$callVar_cmd .= qq( -know \$dbSNP);
 			}
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} ; ) : "\n";
+			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
 			my $realignedbam="$1.realigned.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$callVar_cmd .= qq($gatk -T IndelRealigner -R \$REFERENCE -I $bam -o $realignedbam -targetIntervals $lib.gatk.intervals -LOD 0.4 -compress 6 -l INFO);
 			if (exists $self->{"database:dbSNP"})
@@ -2287,7 +2287,7 @@ sub runGATK ($$) {
 #-knownSites another/optional/setOfSitesToMask.vcf \
 #-o recal_data.grp
 			#$callVar_cmd .= "mkdir ./tmp_covar";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			if (exists $self->{"database:dbSNP"})
 			{
 				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
@@ -2388,10 +2388,10 @@ sub runGATK ($$) {
 			#else
 			#{
 			#	$callVar_cmd .= qq($gatk -T BaseRecalibrator -I $bam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -o $lib.recalibration_report.grp --intermediate_csv_file $lib.recal.csv --plot_pdf_file $lib.comp.pdf);
-			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " ; " : "\n";
+			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			#	my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			#	$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( ; ) : "\n";
+			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			#	$bam = $recalbam;
 			#}
 
@@ -2403,7 +2403,7 @@ sub runGATK ($$) {
 
 ## Genotyping calling
 			$callVar_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -ct $self->{"CustomSetting:multithreads"} -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} ; ) : "\n";
+			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -ct $self->{"CustomSetting:multithreads"} -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} && ) : "\n";
 			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
@@ -2429,11 +2429,11 @@ sub runGATK ($$) {
 			if (exists $self->{"CustomSetting:TargetIntervalList"})
 			{
 				my $TL=checkPaht($self->{"CustomSetting:TargetIntervalList"});
-				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 4 -ct 6 -ct 10 -pt readgroup --omitLocusTable true --omitIntervalStatistics=true";
+				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			} else {
 				#my $output_prefix = $1 if ($bam=~/([^\/\s]+)\.bam/i);
-				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 4 -ct 6 -ct 10 -pt readgroup --omitIntervalStatistics=true";
+				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 			#$bam=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
@@ -3047,6 +3047,15 @@ sub make_config {
 }
 
 
+sub runGapClouser ($) {
+	
+}
+
+sub runGapFiller ($) {
+	
+}
+
+
 #phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
 sub runPhrap ($) {
 	
@@ -3360,8 +3369,152 @@ sub runGenePlot ($) {
 	}
 }
 
+#
+#Parameters 
+# -alignment <Alignment file in BAM, SAM or Alignemnt format> 
+# -maskFileDir <Mask File directory> 
+# -out <Output file name>
+# -sizeFile <Chromosome size file> 
+# -chr <Chromsomosome to segment> 
+# -chrSequence <Necessary to filter spliced reads by splice site information. Notice that this is only compatible with region files that contain regions of only one chromosome> 
+# Optional arguments: 
+# -windows <Comma separated list of windows to evaluate defaults to contiguous regions of coverage>
+# -trim <Include this flag if trimming of the ends of windows based on read coverage  is desired this is expensive> 
+# -alpha <Desired FDR>
+#  -dontFilterCanonicalSplice
+# -start <To segment only a subregion of the chromosome include its start> -end <To segment only a subregion of the chromosome include its end>
+# -minSpliceSupport <Minimum count to support splice reads, default is 1> 
+# -pairedEnd <Paired end alignment files> -strandSpecificReads <Strand specific alignment file> -scoreRegions <Full BED to score> -upWeightSplices -lambda <If a prior background expectation for number of reads per base exists> -exons <BED file of exons> -introns <Introns and counts>
+#
+#Task: AddPairs -  Uses a paired end alignment to tune graph 
+#	-in <Graph in .dot format. Standard input is assumed> 
+#	-pairedEnd <Paired end information (as in previous task), in single line BED format>
+#	 -maskFileDir <Directory containing mask files for the genome> 
+#	-chr <Chromosome (only a chromosome at a time is supported at this point)> 
+#	-sizeFile <Chromosome size file> 
+#	-out <Output file name>
+#
+#Task: fastScore -  Computes several expression related scores for a set of annotations using a the graph .dot file 
+#	-in <chr.dot file> 
+#	-annotations <BED file with annotation to score>
+#	 -chr <chr e.g: chrZ>
+#	 -alpha <optional>
+#	 -out
+#
+#
+#Task: score -  Computes several expression related scores for a set of annotations -in <Full BED file with annotations to score> 
+#	-alignment <Alignment file in BAM, SAM or Alignemnt format> 
+#	-sizeFile <Chromosome size file> 
+#	-out <Output file name> 
+#	 -maskFileDir <Mask File directory>
+#
+#Task: extractDot - Extracts a graph for the specified region 
+#	-in <Dot file from a previous Scripture run 
+#	-chr <Chromosome> 
+#	-start <Start of region> 
+#	-end<End of region> 
+#	-out <output file>
+#
+#Task: getIdenticalGappedReadsTranscripts -  Report all transcripts that ALL their introns are spanned by identical gapped reads -in <Full BED file with annotations to score> 
+#	-alignment <Alignment file in BAM, SAM or Alignemnt format> 
+#	-sizeFile <Chromosome size file> 
+#	-out <Output file name> 
+#	 -maskFileDir <Mask File directory>
+#
+#Task: makePairedFile Makes a paired end alignment file from two sets of independtly aligned left and right ends, ideally the files should be name-sorted 
+#	-pair1 <First pair alignments> 
+#	-pair2 <Second pair alignments> 
+#	-out <output consolidated paired end alignment> 
+#	-sorted  <Include this flag if the data is already read name sorted, ideally both input files should be sorted by read name using unix sort for example> 
+#	-sortBam <Include this flag if the input includes a single BAM file; a temporary SAM file sorted by name would be generated and than removed  > 
+#	-sizeFile <Chromosome size file>
+#
+#Task: chipScan - Segment the genome assuming contiguous data. Similar to the default task but optimized for contiguous data. 
+# -alignment <Alignment file in BAM, SAM or Alignemnt format> 
+# -maskFileDir <Mask File directory> 
+# -out <Output file name>
+# -chr <Chromosome to segment>
+# -sizeFile <Chromosome size file> 
+# -windows <Comma separated list of windows to evaluate defaults to contiguous regions of coverage> 
+# Optional arguments:
+# -findMaxContiguous <Each significant window is trimmed by finding the contiguous sub region with coverage over a predefined threshold> -trim <Include this flag if trimming of the ends of windows based on read coverage  is desired this is expensive> 
+# -alpha <Desired FDR>
+#
+#Task: trim -  Trims end of transcripts by removing all bases whose coverage is below the specified quantile of transcript expression -in <Full BED file with annotations to trim> 
+#	-alignment <Alignment file in BAM, SAM or Alignemnt format> 
+#	-sizeFile <Chromosome size file> 
+#	-out <Output file name> 
+#	 -maskFileDir <Mask File directory>
+#	-quantile <Coverage quantile below which end bases should be trimmed>
+
+## Make paired file task
+# java -Xmx2000m jar scripture.jar -task makePairedFile <Mandatory parameters> <Options>
+## Segmentation task
+# java -Xmx2000m jar scripture.jar <Mandatory parameters> <optional parameter>
+## Add pairs task
+# java -Xmx2000m jar scripture.jar -task addpairs <Mandatory parameters>
+## Score task
+# java -Xmx2000m -jar scripture.jar -task score <Mandatory parameters>
 sub runScripture ($) {
-	
+	my $self = shift;
+	my $ref = shift;
+	$ref ||= 'ref';
+	my $scripture_cmd = $self->runTopHat('ref');
+	$scripture_cmd .= qq(echo `date`; echo "run Scripture"\n);
+	$scripture_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference=checkPath($self->{"database:$ref"});
+	$scripture_cmd .= qq(export REFERENCE="$reference"\n);
+	my $heap = $self->{"CustomSetting:heap"};
+	$scripture_cmd .= qq(export heap="$heap"\n);
+	my $scripture = checkPath($self->{"software:scripture"}) if (exists $self->{"software:scripture"});
+	$scripture=correctJavaCmd($scripture,$heap,"./tmp_scripture");
+	my $para = $self->{"CustomSetting:scripture"} if (exists $self->{"CustomSetting:scripture"});
+	$scripture_cmd .= qq(export scripture="$scripture"\n);
+	my $multi_t=$self->{"CustomSetting:multithreads"};
+	$scripture_cmd .= qq(export multithreads=$multi_t\n);
+	my $samtools = checkPath($self->{"software:samtools"});
+	$scripture_cmd .= qq(export samtools="$samtools"\n);
+	my $which=`which igvtools`;chomp $which;
+	my $igvtools=(-f $which && -e $which) ? $which : checkPath($self->{"software:igvtools"});
+	$scripture_cmd .= qq(export igvtools="$igvtools"\n);
+	my $workdir=checkPath($self->{"-workdir"});
+	$scripture_cmd .= qq(export workdir="$workdir"\n);
+	$scripture_cmd .= qq(cd \${workdir}\n);
+	my $scripture_outdir = (exists $self->{"CustomSetting:scripture_outdir"}) ? checkPath($self->{"CustomSetting:scripture_outdir"}) : "./scripture_out";
+	$scripture_cmd .= qq(export scripture_outdir="$scripture_outdir"\n);
+	$scripture_cmd .= qq([[ -d \${scripture_outdir} ]] || mkdir -p \${scripture_outdir}\n) if (!-d qq($self->{"-workdir"}/$scripture_outdir));
+	$scripture_cmd .= qq(cd \${scripture_outdir}\n);
+	if (-f "$reference.fai" || -f "$reference.dict") {
+		if (-f "$reference.fai") {
+			$scripture_cmd .= "cut -f 1,2 $reference.fai > $reference.size";
+		}
+		elsif (-f "$reference.dict") {
+			$scripture_cmd .= qq(cut -f 1,2 $reference.dict | sed 's\/SN\\:\/\/;s\/LN\\:\/\/;' > $reference.size);
+		}
+	}
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $multi=0;
+	foreach my $lib (@libraries) {
+		#my %fq=getlibSeq($self->{"LIB"}{$lib});
+		$scripture_cmd .= qq([[ -d $lib ]] || mkdir -p $lib\n);
+		$scripture_cmd .= qq(cd $lib\n);
+		my $tophatbam = $self->{$lib}{"tophatbam"};
+		my $tophatsam = "$1.sam" if ($tophatbam=~/(\S+)\.bam$/);
+		$scripture_cmd .= qq(\${samtools} view $tophatbam > $tophatsam && );
+		$scripture_cmd .= qq(\${igvtools} index $tophatsam && );
+		$scripture_cmd .= qq(\${scripture} -alignment $tophatsam -out $lib.segments.txt -sizeFile $reference.size  -chrSequences \${REFERENCE});
+		$scripture_cmd .= qq( $para ) if (defined $para);
+		if ($multi % $multi_t==0) {
+			$scripture_cmd .= "\n";
+		}
+		else {
+			$scripture_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " &\n " : "\n";
+		}
+		$scripture_cmd .= qq(cd ../\n);
+		$multi++;
+	}
+	$scripture_cmd .= qq(cd ../\n);
+	return $scripture_cmd;
 }
 
 #########################################################
@@ -3744,6 +3897,11 @@ sub runMrBayes
 	return $mb_cmd;
 }
 
+
+#cluster -f tabfile -l -cg m -ca a -na -e 7
+sub runCluster ($) {
+	
+}
 
 sub getlibSeq ($) {
 	my $lib=shift;

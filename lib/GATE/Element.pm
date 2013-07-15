@@ -105,7 +105,7 @@ sub plot($) {
 
 sub denovo($) {
 	my $self=shift;
-	$self->runTrinity().$self->runVelvetOases().$self->runSOAPdenovo();
+	$self->runScripture().$self->runTrinity().$self->runVelvetOases().$self->runSOAPdenovo();
 }
 
 sub abinito($) {
