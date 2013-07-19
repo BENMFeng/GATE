@@ -91,10 +91,11 @@ Prvious Version
 	PlotGeneSplicing.pl v1.4a, 2012-03-22 add junction reads info for proving skipped exon
 	PlotGeneSplicing.pl v1.5a, 2012-03-29 update
 	PlotGeneSplicing.pl v1.6a, 2012-10-11 update
+	GenePlot.pl         v0.1.0, 2012-11-14 update
 
 Current Version
 
-	GenePlot.pl v0.1.0, 2012-11-14 revise the most of functions
+	GenePlot.pl v0.1.1, 2013-07-16 revise the most of functions
 
 =head1 example
 
@@ -620,6 +621,7 @@ sub plotCoverage
 	my $coverage_resolution = $coverage_figure_heigth / $coverage_max;
 
 	my $x_coor = $X_coor;
+	plot_vertical_ruler($svg,$X_coor,$Y_coor, $coverage_max, $coverage_resolution);
 	for (my $i=0; $i<@$ary_p; $i++)
 	{
 		$ary_p->[$i] = $coverage_max if($ary_p->[$i] > $coverage_max); 
@@ -659,6 +661,32 @@ sub plotCoverage
 			$svg->rect('x',$x_coor, 'y',$y_coor,'width',$win,'height',$ary_p->[$i] * $coverage_resolution,'stroke',$color,'fill',$color);
 		}
 		$x_coor+=$win;
+	}
+}
+
+sub plot_vertical_ruler
+{
+	my ($svg,$x,$y,$max_coverage, $coverage_resolution)=@_;
+	my $vertical_line_scale_size = 10;
+	my $vertical_ruler_x=$x-$vertical_line_scale_size;
+	my $vertical_ruler_high = $max_coverage * $coverage_resolution-5;
+	my $vertical_ruler_yo=$y;
+	print STDERR "plotting vertical ruler...\n" if ($Verbose);
+	my $vertical_ruler_scale=$vertical_ruler_high;
+	my $vertical_ruler_unit=$vertical_ruler_scale/2;
+	my $k=0;
+	my $y_scale=$max_coverage;
+	my $y_unit=int($y_scale/2+0.5);
+	my $vertical_ruler_y=$vertical_ruler_yo+$vertical_ruler_high;
+	$svg->line('x1',$vertical_ruler_x,'y1',$vertical_ruler_yo+$vertical_ruler_high-$vertical_ruler_unit*2,'x2',$vertical_ruler_x,'y2',$vertical_ruler_yo+$vertical_ruler_high,'stroke','#000000','stroke-width',1.5);
+	for (my $v=0;$v<=$vertical_ruler_scale;$v+=$vertical_ruler_unit)
+	{
+		$vertical_ruler_y -= $v;
+		$vertical_ruler_y = $vertical_ruler_yo+$vertical_ruler_high-$vertical_ruler_unit*2 if ($vertical_ruler_y<$vertical_ruler_yo+$vertical_ruler_high-$vertical_ruler_unit*2);
+		$y_scale = $y_unit*$k;
+		$k++;
+		$svg->text('x',$vertical_ruler_x-$vertical_line_scale_size-$vertical_line_scale_size-textWidth($Font_family,$Font_size,$y_scale)-5,'y',$vertical_ruler_y+textWidth($Font_family,$Font_size,$y_scale)/2,'stroke',"black",'fill',"black",'-cdata',$y_scale,"font-family",$Font_family,"font-size",$Font_size);
+		$svg->line('x1',$vertical_ruler_x-$vertical_line_scale_size-$vertical_line_scale_size,'y1',$vertical_ruler_y,'x2',$vertical_ruler_x,'y2',$vertical_ruler_y,'stroke','#000000','stroke-width',1.5);
 	}
 }
 
@@ -777,7 +805,7 @@ sub parseBed
 	my $overlap=join "_overlap_",((split /\//,$bed)[-1],(split /\//,$gff)[-1]);
 	print STDERR readTime()."disposing overlap between file: $bed and file: $gff\n" if ($Verbose);
 	`disposeOverlap.pl --E O --i1 $bed --f1 0,5-3,4,10-1-2  --i2 $gff --f2 0,6-2,8-3-4 > $overlap` unless (-s $overlap);
-	print STDERR "disposeOverlap.pl --E O --i1 $bed --f1 0,5-3,4,10-1-2  --i2 $gff --f2 0,6-2,8-3-4 > $overlap\n" if ($Verbose);
+	print STDERR "overlap.pl --E O --i1 $bed --f1 0,5-3,4,10-1-2  --i2 $gff --f2 0,6-2,8-3-4 > $overlap\n" if ($Verbose);
 
 	my @sp_jun=();
 	my ($pre_chr,$pre_strand)=("","");
@@ -886,6 +914,15 @@ sub parseGff
 	my ($file,$label,$hash)=@_;
 	my $getGene="";
 	print STDERR readTime()."parsing Gene Gff file: $file\n" if ($Verbose);
+	my $check_transcript;
+	if ($label=~/refGene/) {
+		my $cmd=qq(head -100 $file | awk '\$3=="transcript"');
+		$check_transcript=`$cmd`;
+		if (defined $check_transcript && $check_transcript ne "") {
+			print STDERR "\tfound transcripts in refGene file: $file\n" if ($Verbose);
+		}
+		
+	}
 	open (IN,$file) || die $!;
 	while(<IN>)
 	{
@@ -905,8 +942,22 @@ sub parseGff
 					push @{$GeneRH{$seqid}},[$start,$end,$strand,$getGene];
 					push @{$GeneRH{$getGene}},[$start,$end,$strand,$seqid];
 					$GeneBH{$getGene}++;
+					last;
 				}
 			}
+			while ($attributes=~/\"([^"]+)\"/gi)
+			{
+				if ((exists $GeneLH{"$file:$1"})||(exists $GeneLH{"$1"}))
+				{
+					print STDERR "\tfind gene: $1\n" if ($Verbose);
+					$getGene=$1;
+					push @{$GeneRH{$seqid}},[$start,$end,$strand,$getGene];
+					push @{$GeneRH{$getGene}},[$start,$end,$strand,$seqid];
+					$GeneBH{$getGene}++;
+					last;
+				}
+			}
+			next if (defined $check_transcript && $check_transcript ne "");
 		}
 		elsif (($label!~/refGene/i)&&(($type=~/transcript/i)||($attributes=~/gene\=/i)||($attributes=~/name\=/i)))
 		{
@@ -1113,7 +1164,7 @@ sub plotRuler
 	}
 	if ($rulcfg{scalestart} eq "force")
 	{
-		$unit_start = int($rulcfg{bp_start} / 10 + 0.5) * 10;
+		$unit_start = $rulcfg{bp_start}; #int($rulcfg{bp_start} / 10 + 0.5) * 10;
 	}
 	
 	## draw small scale lines
@@ -1131,7 +1182,8 @@ sub plotRuler
 		$g->line('x1',$X,'y1',$rulcfg{Y} - $scale_size,'x2',$X,'y2',$rulcfg{Y},'stroke','#000000','stroke-width',1) if ($rulcfg{rulerstyle} eq '1');
 		$g->line('x1',$X,'y1',$rulcfg{Y} + $scale_size,'x2',$X,'y2',$rulcfg{Y},'stroke','#000000','stroke-width',1)  if ($rulcfg{rulerstyle} eq '2');
 		$g->line('x1',$X,'y1',$rulcfg{Y} - $scale_size,'x2',$X,'y2',$rulcfg{Y},'stroke','#000000','stroke-width',1) if ($rulcfg{rulerstyle} eq '3');
-		my $disp_scale_text = $i / $rulcfg{bigscalesize}  if(defined $rulcfg{bigscalesize});
+		my $bit = log($rulcfg{bigscalesize})/log(10) if(defined $rulcfg{bigscalesize});
+		my $disp_scale_text = sprintf("%.$bit"."f",$i / $rulcfg{bigscalesize})  if(defined $rulcfg{bigscalesize});
 		$rulcfg{svg}->text('x',$X - textWidth($rulcfg{font_family},$rulcfg{font_size}/2,$disp_scale_text) / 2,'y',$rulcfg{Y}+textHeight($rulcfg{font_size}),'fill','#000000','-cdata',$disp_scale_text,'font-size',$rulcfg{font_size}, 'font-family',$rulcfg{font_family}) if ($rulcfg{rulerstyle} eq '1');
 		$rulcfg{svg}->text('x',$X - textWidth($rulcfg{font_family},$rulcfg{font_size}/2,$disp_scale_text) / 2,'y',$rulcfg{Y}+$scale_size+textHeight($rulcfg{font_size})+2,'fill','#000000','-cdata',$disp_scale_text,'font-size',$rulcfg{font_size}, 'font-family',$rulcfg{font_family})  if ($rulcfg{rulerstyle} eq '2');
 		$rulcfg{svg}->text('x',$X - textWidth($rulcfg{font_family},$rulcfg{font_size}/2,$disp_scale_text) / 2,'y',$rulcfg{Y}-$scale_size-textHeight($rulcfg{font_size})+6,'fill','#000000','-cdata',$disp_scale_text,'font-size',$rulcfg{font_size}, 'font-family',$rulcfg{font_family}) if ($rulcfg{rulerstyle} eq '3');

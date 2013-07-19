@@ -22,8 +22,8 @@ use vars qw($VERSION);
 $VERSION = "1.1,07-16-2013";
 package GATE::Element;
 #package GATE::Extension;
-use FindBin qw($Bin $Script);
-use lib "$FindBin::Bin/../lib";
+use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
+use lib "$FindBin::Bin/../lib";  ## Bin live in the lib
 use File::Basename qw(basename dirname);
 use Cwd;
 
@@ -1355,6 +1355,232 @@ sub runBEDtools ($) {
 #                                                       #
 #########################################################
 
+#maq fasta2bfa in.ref.fasta out.ref.bfa
+#maq sol2sanger in.solexa.fastq out.sanger.fastq
+#maq fastq2bfq in.read.fastq out.read.bfq
+#maq map [-a  maxins] aln.map in.ref.bfa in.read1.bfq in.read2.bfq 2>out.map.log
+#maq mapmerge out.aln.map in.aln1.map in.aln2.map [...]
+#maq mapview in.aln.map > out.aln.mapview
+#maq assemble [-sp] [-m maxmis] [-Q maxerr] [-r hetrate] [-t coef] [-q minQ] [-M avgmaf] out.cns in.ref.bfa in.aln.map 2> out.cns.log
+#maq indelpe in.ref.bfq in.aln.map > out.indelpe
+#maq cns2snp in.cns > out.snp
+#maq.pl SNPfilter [-d minDep] [-D maxDep] [-Q maxMapQ] [-q minCnsQ] [-w indelWinSize] [-n minNeiQ] [-F in.indelpe] [-f in.indelsoa] [-s minScore] [-m maxAcross] [-a] [-N maxWinSNP] [-W densWinSize] in.cns2snp.snp > out.filtered.snp 
+
+#lastest version: v0.7.1
+sub runMAQ ($$) {
+	my $self=shift;
+	my $ref=shift;
+	if (!exists $self->{"software:maq"} || !defined $self->{"software:maq"} || !-e $self->{"software:maq"}){
+		return "";
+	}
+	my $maq_cmd = qq(echo `date`; echo "run MAQ"\n);
+	$maq_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $maq =checkPath($self->{"software:maq"});
+	$maq_cmd .= qq(export maq="$maq"\n);
+	my $maqpl=checkPath($self->{"software:maq.pl"});
+	$maq_cmd .= qq(export maqpl="$maqpl"\n);
+	my $samtools=checkPath($self->{"software:samtools"});
+	my $samtools_path=$1 if ($samtools =~ /(\S+)\/samtools/);
+	my $maq2sam;
+	$maq2sam=checkPath("$samtools_path/misc/maq2sam-short") if (-f "$samtools_path/misc/maq2sam-short" && -e "$samtools_path/misc/maq2sam-short");
+	$maq2sam=checkPath($self->{"software:maq2sam"}) if (exists $self->{"software:maq2sam"});
+	$maq_cmd .= qq(export samtools="$samtools"\n);
+	$maq_cmd .= qq(export maq2sam="$maq2sam"\n) if (defined $maq2sam);
+	my $reference=checkPath($self->{"database:$ref"});
+	
+	my $mappara="";
+	$mappara=$self->{'CustomSetting:maqmap'} if (exists $self->{'CustomSetting:maqmap'});
+	$maq_cmd .= qq(export mappara="$mappara"\n) if (defined $mappara);
+	my $assemblepara="";
+	$assemblepara=$self->{'CustomSetting:maq_assemble'} if (exists $self->{'CustomSetting:maq_assemble'});
+	$maq_cmd .= qq(export assemblepara="$assemblepara"\n) if (defined $assemblepara);
+
+	my $workdir=checkPath($self->{"-workdir"});
+	$maq_cmd .= qq(export workdir="$workdir"\n);
+	my $alndir= checkPath($self->{"CustomSetting:aln_outdir"});
+	$maq_cmd .= qq(export alndir="$alndir"\n);
+	my $bfa   = "$1.bfa" if ($reference=~/(\S+).fa/);
+	$maq_cmd .= "\${maq} fasta2bfa \$REFERENCE \n" unless (checkIndex('maq',$reference)==1);
+	$maq_cmd .= qq(export REFBFA="$bfa"\n);
+	$maq_cmd .= qq(cd \${workdir}\n);
+	$maq_cmd .= qq(cd \${alndir});
+	
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $multi=0;
+	foreach my $lib(@libraries) {
+		$maq_cmd .= qq(echo `date`; echo "$lib"\n);
+		$maq_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) if (!-e qq($self->{"-workdir"}/$self->{"CustomSetting:aln_outdir"}/$lib));
+		$maq_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my @map;
+		my $rg="";
+		if (exists $fq{1} && exists $fq{2}){
+			for (my $j=0;$j<@{$fq{2}};$j++) {
+				if (@{$fq{2}}>1) {
+					my $k=$j+1;
+					my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
+					my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+					my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+					$rg.=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq1'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
+						}
+					}
+					$rg=~s/\'$//;
+					$rg.="\\n";
+					my $fq1=${$fq{1}}[$j];
+					my $fq2=${$fq{2}}[$j];
+					my $bfq1="$1.bfq" if ($fq1=~/(\S+).fastq/ || $fq1=~/(\S+)\.fq/);
+					my $bfq2="$1.bfq" if ($fq2=~/(\S+).fastq/ || $fq2=~/(\S+)\.fq/);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq1 $bfq1) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=qq( &\n);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq2 $bfq2\n) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=print_check_process('fastq2bfq',"$bfq1","$bfq2");
+					if ($PI>600) {
+						$maq_cmd.=qq(\${maq} map -A $PI $mappara $lib.pair.$k.aln.map \$REFBFA $bfq1 $bfq2 && );
+					} else {
+						$maq_cmd.=qq(\${maq} map -a $PI $mappara $lib.pair.$k.aln.map \$REFBFA $bfq1 $bfq2 && );
+					}
+					#$maq_cmd.=qq(\${maq2sam} $lib.$k.aln.map $lib.$k.aln.sam $rg && ) if (defined $maq2sam);
+					#$maq_cmd.=qq(\${maq} assemble \${assemblepara} $lib.$k.cns \$REFBFA $lib.$k.aln.map && );
+					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$multi++;
+					push @map, "$lib.pair.$k.aln.map";
+					
+				}else{
+					my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
+					my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+					my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+					$rg.=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$rg=~s/\'$//;
+					$rg.="\\n";
+					my $fq1=${$fq{1}}[$j];
+					my $fq2=${$fq{2}}[$j];
+					my $bfq1="$1.bfq" if ($fq1=~/(\S+).fastq/ || $fq1=~/(\S+)\.fq/);
+					my $bfq2="$1.bfq" if ($fq2=~/(\S+).fastq/ || $fq2=~/(\S+)\.fq/);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq1 $bfq1) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=qq( &\n);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq2 $bfq2\n) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=print_check_process('fastq2bfq',"$bfq1","$bfq2");
+					if ($PI>600) {
+						$maq_cmd.=qq(\${maq} map -A $PI $mappara $lib.pair.aln.map \$REFBFA $bfq1 $bfq2 && );
+					} else {
+						$maq_cmd.=qq(\${maq} map -a $PI $mappara $lib.pair.aln.map \$REFBFA $bfq1 $bfq2 && );
+					}
+					#$maq_cmd.=qq(\${maq2sam} $lib.aln.map $lib.aln.sam $rg && ) if (defined $maq2sam);
+					#$maq_cmd.=qq(\${maq} assemble \${assemblepara} $lib.cns \$REFBFA $lib.aln.map && );
+					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$multi++;
+					push @map, "$lib.pair.aln.map";
+				}
+			}
+		}
+		if (exists $fq{0}) {
+			for (my $j=0;$j<@{$fq{0}};$j++) {
+				if (@{$fq{0}}>1) {
+					my $k=$j+1;
+					my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:"$lib-$k";
+					my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+					my $PI=(exists $self->{$lib}{'fq'}{$j}{'PI'})?$self->{$lib}{'fq'}{$j}{'PI'}:500;
+					$rg.=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$rg=~s/\'$//;
+					$rg.="\\n";
+					my $fq=${$fq{0}}[$j];
+					my $bfq="$1.bfq" if ($fq=~/(\S+).fastq/ || $fq=~/(\S+)\.fq/);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq $bfq) unless (checkIndex('maq',$fq)==1);
+					$maq_cmd.=print_check_process('fastq2bfq','$bfq');
+					$maq_cmd.=qq(\${maq} map $mappara $lib.single.$k.aln.map \$REFBFA $bfq && );
+					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$multi++;
+					push @map, "$lib.single.$k.aln.map";
+					
+				}else{
+					my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:"$lib";
+					my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+					my $PI=(exists $self->{$lib}{'fq'}{$j}{'PI'})?$self->{$lib}{'fq'}{$j}{'PI'}:500;
+					$rg.=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$rg=~s/\'$//;
+					$rg.="\\n";
+					my $fq=${$fq{0}}[$j];
+					my $bfq="$1.bfq" if ($fq=~/(\S+).fastq/ || $fq=~/(\S+)\.fq/);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq $bfq) unless (checkIndex('maq',$fq)==1);
+					$maq_cmd.=print_check_process('fastq2bfq','$bfq');
+					$maq_cmd.=qq(\${maq} map $mappara $lib.single.aln.map \$REFBFA $bfq && );
+					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$multi++;
+					push @map, "$lib.single.aln.map";
+				}
+			}
+		}
+		$maq_cmd.=print_check_process('maq','map',"$lib");
+		my $libmap;
+		if (@map>1) {
+			my $allmap=join " ",@map;
+			$maq_cmd.=qq(\${maq} mapmerge $lib.merge.aln.map $allmap && );
+			$libmap = "$lib.merge.aln.map";
+		} elsif (@map>0) {
+			$libmap = $map[0];			
+		}
+		if (defined $libmap) {
+			$maq_cmd.=qq(\${maq2sam} $libmap $rg && ) if (defined $maq2sam);
+			$maq_cmd.=qq(\${maq} assemble \${assemblepara} $lib.cns \$REFBFA $libmap && );
+			$maq_cmd.=qq(\${maq}cns2snp $lib.cns > $lib.snp && );
+			$maq_cmd.=qq(\${maq} indelpe \$REFBFA $libmap > out.indelpe && );
+			$maq_cmd.=qq(\${maqpl} SNPfilter $lib.snp > $lib.filtered.snp ); 
+			$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+			$multi++;
+			push @{$self->{$lib}{"$ref-maqmap"}},$libmap;
+		}
+		$maq_cmd.="cd ..\n";
+	}
+	$maq_cmd.="cd ..\n";
+	return $maq_cmd;
+}
+
 #latest version: 0.7.4-r385
 sub runBWA($$) {
 	my $self=shift;
@@ -1363,8 +1589,7 @@ sub runBWA($$) {
 		return "";
 	}
 	$ref ||= 'ref';
-	my $bwa_cmd;
-	$bwa_cmd = qq(echo `date`; echo "run BWA"\n);
+	my $bwa_cmd = qq(echo `date`; echo "run BWA"\n);
 	$bwa_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
 	my $bwa=checkPath($self->{"software:bwa"});
 	$bwa_cmd .= qq(export bwa="$bwa"\n);
@@ -2475,6 +2700,7 @@ sub runGATK ($$) {
 #perl -e 'my @f=glob("realign_windows.*.txt");foreach (@f){my $prefix="dindel_stage2_output_windows.$1" if ($_=~/windows\.(\d+)\./);system "/usr/local/bin/dindel --analysis indels --doDiploid --bamFile realigned.baq.bam --ref reference.fa --varFile $_ --libFile dindel_output.libraries.txt --outputFile $prefix";}'
 #ls dindel_stage2_output_windows.*.glf.txt > dindel_stage2_outputfiles.txt
 #python /usr/local/bin/mergeOutputDiploid.py --inputFiles dindel_stage2_outputfiles.txt --outputFile variantCalls.VCF --ref reference.fa 
+
 sub runDindel ($) {
 	my $self=shift;
 	my $ref=shift;
@@ -2525,6 +2751,25 @@ sub runPindel ($) {
 	
 }
 
+
+##a) For individual sequencing data
+# /path/to/java -jar /path/to/SNVer-0.2.0/SNVerIndividual.jar \
+# -i pe.sorted.dedup.bam -o prefix_of_output -r ref.fasta -l target.bed
+
+## b) For pooled Sequencing data
+# /path/to/java -jar /path/to/SNVer-0.2.0/SNVerPool.jar -c pool.info \
+# -i input_bam -o prefix_of_output -r ref.fasta -l target.bed
+## or
+# /path/to/java -jar /path/to/SNVer-0.2.0/SNVerPool.jar -n 96 \
+# -i input_bam -o prefix_of_output -r ref.fasta -l target.bed
+## Annotation
+#/path/to/annovar/convert2annovar.pl -format vcf4 pe.vcf > input
+#/path/to/annovar/summarize_annovar.pl --verdbsnp 132 --buildver hg19 \
+#--outfile sum input /path/to/humandb 
+sub runSNVer ($) {
+	
+}
+
 #"A program for annotating and predicting the effects of single nucleotide polymorphisms,SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]
 sub runSnpEff ($) {
 	my $self=shift;
@@ -2544,7 +2789,7 @@ sub runSnpSift ($) {
 #	not have allele frequency information, the frequency information can be arbitrarily determined as 
 #	any positive values, which only imply what alleles have already been deposited in the database.
 sub runSOAPsnp($) {
-	
+	my $self=shift;
 }
 
 sub checkdbSNP {
@@ -3461,6 +3706,9 @@ sub runScripture ($) {
 	my $self = shift;
 	my $ref = shift;
 	$ref ||= 'ref';
+	if (exists $self->{"software:scripture"}){
+		return "";
+	}
 	my $scripture_cmd = $self->runTopHat('ref');
 	$scripture_cmd .= qq(echo `date`; echo "run Scripture"\n);
 	$scripture_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
@@ -3978,6 +4226,16 @@ sub checkIndex($$) {
 		} else {
 			return 1;
 		}
+	} elsif ($soft eq "maq") {
+		my $prefix= $1 if ($db=~/(\S+)\.fa/);
+		if ($db=~/fa/i && !-f "$db.bfa" && !-f "$prefix.bfa") {
+			print STDERR get_time()."\t\tno maq index for $db\n";
+			return 0;
+		} else {
+			return 1;
+		}
+	} elsif ($soft eq "blast") {
+		
 	}
 }
 
@@ -4080,10 +4338,12 @@ sub check_fileformat ($) {
 sub print_check_process {
 	my @ary=@_;
 	my $out="";
-	foreach my $process(@ary)
-	{
-		$out .= qq(user=`whoami`\np=\`ps -u \$user -f |grep $process |grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f |grep $process |grep -v grep\`\ndone\n);
+	my $process = join " ",@ary;
+	my $grep="";
+	foreach my $p (@ary) {
+		$grep .= " \| grep $p";
 	}
+	$out .= qq(user=`whoami`\np=\`ps -u \$user -f $grep | grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f $grep | grep -v grep\`\ndone\n);
 	return $out;
 }
 
