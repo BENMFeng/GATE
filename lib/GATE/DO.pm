@@ -2292,7 +2292,7 @@ sub runGATK ($$) {
 	if (defined $samtools_path)
 	{
 		$callVar_cmd .= qq(export samtools_path="$samtools_path"\n);
-		$callVar_cmd .= qq (export PATH="\${samtools}_path":"\${samtools}_path/bcftools":\$PATH\n);
+		$callVar_cmd .= qq (export PATH="\${samtools_path}":"\${samtools_path}/bcftools":\$PATH\n);
 	}
 	if (exists $self->{"software:picard"})
 	{
