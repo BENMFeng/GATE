@@ -187,7 +187,7 @@ sub runPhred ($) {
 		if (@dir > 0) {
 			for my $directory (@dir) {
 				my $dirname = (split /\//,$directory)[-1]; 
-				$phred_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
+				$phred_cmd .= qq([[ -d $lib ]] || mkdir $lib\n);
 				$phred_cmd .= qq(cd $lib\n);
 				$phred_cmd .= qq(ln -s $directory ; mkdir -p $dirname/qual_dir ; mkdir -p $dirname/seq_dir\n);
 				$phred_cmd .= qq(\${phred} \${phredpara}-id $dirname/ -sd $dirname/seq_dir/ -qd $dirname/qual_dir/\n);
@@ -226,7 +226,7 @@ sub runCASAVA ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $gotseq=0;
 	foreach my $lib(@libraries) {
-		$casava_cmd .= qq([[ -d $lib ] || mkdir $lib\n);
+		$casava_cmd .= qq([[ -d $lib ]] || mkdir $lib\n);
 		$casava_cmd .= qq(cd $lib\n);
 		my @input=@{$self->{'LIB'}{$lib}{"input-dir"}};
 		for (my $i=0;$i<@input;$i++) {
@@ -3343,7 +3343,7 @@ sub runNewbler ($) {
 	my $workdir .= checkPath($self->{"-workdir"});
 	$newbler_cmd .= qq(export workdir=$workdir\n);
 	$newbler_cmd .= qq(cd \${workdir}\n);
-	$newbler_cmd .= "[[ -d newbler] || mkdir newbler\n" if (!-d qq($self->{"-workdir"}/newbler));
+	$newbler_cmd .= "[[ -d newbler }] || mkdir newbler\n" if (!-d qq($self->{"-workdir"}/newbler));
 	$newbler_cmd .= qq(cd newbler\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries)
@@ -3425,7 +3425,7 @@ sub runCuffdiff($) {
 	my $workdir .= checkPath($self->{"-workdir"});
 	$cuffdiff_cmd .= qq(export workdir=$workdir\n);
 	$cuffdiff_cmd .= qq(cd \${workdir}\n);
-	$cuffdiff_cmd .= "[[ -d cuffdiff] || mkdir cuffdiff\n" if (!-d qq($self->{"-workdir"}/cuffdiff));
+	$cuffdiff_cmd .= "[[ -d cuffdiff ]] || mkdir cuffdiff\n" if (!-d qq($self->{"-workdir"}/cuffdiff));
 	$cuffdiff_cmd .= "cd cuffdiff\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my ($label,$bam)=("","");
@@ -3940,7 +3940,7 @@ sub runSNAP ($) {
 	
 }
 
-sub runGeneScan ($) {
+sub runGenScan ($) {
 	
 }
 
@@ -4312,8 +4312,12 @@ sub check_fileformat ($) {
 				return "fastq.gz";
 			}
 			close IN;
-		} elsif ($file=~/sff/) {
+		} elsif ($file=~/sff/i) {
 			return "sff";
+		} elsif ($file=~/bfa/i) {
+			return "bfa";
+		} elsif ($file=~/bfq/i) {
+			return "$bfq";
 		}
 	} elsif (-T $file) {
 		if ($file=~/sam/i) {
