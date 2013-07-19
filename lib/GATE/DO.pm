@@ -1566,11 +1566,11 @@ sub runMAQ ($$) {
 			$libmap = $map[0];			
 		}
 		if (defined $libmap) {
-			$maq_cmd.=qq(\${maq2sam} $libmap $rg && ) if (defined $maq2sam);
 			$maq_cmd.=qq(\${maq} assemble \${assemblepara} $lib.cns \$REFBFA $libmap && );
 			$maq_cmd.=qq(\${maq}cns2snp $lib.cns > $lib.snp && );
 			$maq_cmd.=qq(\${maq} indelpe \$REFBFA $libmap > out.indelpe && );
-			$maq_cmd.=qq(\${maqpl} SNPfilter $lib.snp > $lib.filtered.snp ); 
+			$maq_cmd.=qq(\${maqpl} SNPfilter $lib.snp > $lib.filtered.snp && );
+			$maq_cmd.=qq(\${maq2sam} $libmap $rg) if (defined $maq2sam); 
 			$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
 			$multi++;
 			push @{$self->{$lib}{"$ref-maqmap"}},$libmap;
@@ -4183,7 +4183,7 @@ sub getlibSeq ($) {
 sub checkIndex($$) {
 	my ($soft,$db)=@_;
 	if ($soft eq 'bwa') {
-		my @refidx=glob("$db.*");
+		my @refidx = glob("$db.*");
 		if (@refidx<5 || !-f "$db.bwt" || !-f $db) {
 			print STDERR get_time()."\t\tno bwa index for $db\n";
 			return 0;
