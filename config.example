@@ -1,5 +1,9 @@
+
+## ==>config.example<==
+-----------------------------------------------------------------
 [database]
 ref=/share/database/hg19.fa
+AP=/home/bio/software/filter_adapter/db/HiSeqAdaptersPrimersForAncientDNALibrary.fa
 lncRNA=/share/database/human_lncrna.fa
 rRNA=/share/database/human_all_rRNA.fasta
 refGene=/share/database/refGene.gtf
@@ -7,41 +11,127 @@ refseq-bed=/share/database/hg19.refseq.bed12
 gencode-gtf=/share/database/gencode.v7.annotation.gtf
 gencode-gc=/share/database/gencode.v7.gc.txt
 genelist=./gene_list.txt
+
 [software]
+## QC software
+selectIdxFastq=/home/bio/pub/GATE/bin/selectIdxFastq.pl
+mergeOverlapPE=/home/bio/pub/GATE/bin/mergeOverlapPE.pl
+filterPCRdup=/home/bio/pub/GATE/bin/filterPCRdup.pl
+scanAP=/home/bio/software/scanAP/scanAP
+trim_seq=/home/bio/pub/GATE/bin/trim_seq.pl
+fastq2pe=/home/bio/pub/GATE/bin/fastq2pe.pl
+fastqcut=/home/bio/pub/GATE/bin/fastqcut.pl
 SolexaQA=/usr/local/bin/SolexaQA.pl
-RNA-SeQC=/usr/local/biosoft/RNA-SeQC/RNA-SeQC_v1.1.7.jar
+RNA-SeQC=./software/RNA-SeQC/RNA-SeQC_v1.1.7.jar
+
+## ALN software
 bwa=/usr/local/bin/bwa
+
+# BAMtools
+bamtools=/usr/local/bin/bamtools
+
+## VAR software
 samtools=/usr/local/bin/samtools
-picard=/usr/local/bin/picard-1.77.jar
+picard=/usr/local/bin/picard-1.82.jar
 gatk=/usr/local/bin/GenomeAnalysisTK.jar
+
+## EXP software
 bowtie=/usr/local/bin/bowtie2
 cufflinks=/usr/local/bin/cufflinks
-tophat=/usr/local/bin/tophat
-AlternativeSplicing=/usr/local/bin/AlternativeSplicing.jar
-SamToFastq=/usr/local/bin/SamToFastq.jar
+tophat=/usr/local/bin/tophat2
+
+## AS software
+AlternativeSplicing=./bin/AlternativeSplicing.jar
+SamToFastq=./bin/SamToFastq.jar
+GenePlot=/home/bio/pub/GATE/bin/GenePlot.pl
+
 [CustomSetting]
-bwaaln=-t 14 -n 2 -q 10
-tophat=--solexa-quals -p 10 -r 200 --bowtie2
-cufflinks=-p 10 -b -u --total-hits-norm
-qsub=-cwd -q mem.q -P mem -l cpu=8,vf=16G
-multimode=yes
-multithreads=10
-PATH=/usr/local/bin
+PATH=/home/bio/pub/GATE/bin/:/home/bio/bin/
 RSeQCPATH=/usr/local/bin/
 PYTHONPATH=/usr/local/lib/python2.7/site-packages
+# Java config 
+heap=4g
+# BWA alnpara
+bwaaln=-n 0.05 -e 5 -d 10 -o 3 -l 25 -k 3 -t 12 -M 2
+# TopHat para
+tophat=--solexa-quals -p 10 -r 200 --bowtie2
+# Cufflinks para
+cufflinks=-p 10 -b -u --total-hits-norm
+# BWA aln outdir
+aln_outdir=aln
+# Variation calling outdir
+var_outdir=var
+# scanAP penalty score matrix
+align.mat=/home/bio/software/scanAP/align.mat
+# trim_seq.pl para
+trim_seq=-ap_db $AP -edge 3 -len_t 25 -len_p 0.25 -trim_mode both -ap_mode -verbose
+# quality control outdir
+qc_outdir=qc
+
+# if 'clean=yes' or 'clean=TRUE' it will clean the interval files
+clean=yes
+
+# PBS jobs parameters
+multimode=yes
+multithreads=2
+qsub=-cwd -q mem.q -P mem -l cpu=8,vf=16G
+
 [LIB]
-Label=UF
-fq1=../01.input/UF1-1.fq.gz
-fq2=../01.input/UF1-2.fq.gz
-fq1=../01.input/UF2-1.fq.gz
-fq2=../01.input/UF2-2.fq.gz
-Label=BF
-fq1=../01.input/BF1-1.fq.gz
-fq2=../01.input/BF1-2.fq.gz
-fq1=../01.input/BF2-1.fq.gz
-fq2=../01.input/BF2-2.fq.gz
-Label=ST
-fq1=../01.input/ST1-1.fq.gz
-fq2=../01.input/ST1-2.fq.gz
-fq1=../01.input/ST2-1.fq.gz
-fq2=../01.input/ST2-2.fq.gz
+LB=A
+ID=A
+SM=hs
+PL=Illumina
+PU=hiseq2000
+fq1=./01.data/A-1.fq.gz
+fq2=../01.data/A-2.fq.gz
+
+[LIB]
+LB=B
+ID=B
+SM=hs
+PL=Illumina
+PI=2000
+PU=hiseq2000
+MergePE=TRUE
+fq1=./01.data/B-1.fq.gz
+fq2=./01.data/B-2.fq.gz
+fq=./01.data/B_SE.fq
+
+[LIB]
+LB=ST
+ID=ST
+SM=mm
+PL=Illumina
+PU=miseq
+Index=CAGT
+fq1=./01.data/C1-1.fq.gz
+fq2=./01.data/C1-2.fq.gz
+fq1=./01.data/C2-1.fq.gz
+fq2=./01.data/C2-2.fq.gz
+fq=./01.data/C_SE1.fq
+fq=./01.data/C_SE2.fq
+
+[INPUT]
+Label=D
+ref-bwabam=./02.aln/D1.bam
+ref-bwabam=./02.aln/D2.bam
+Label=E
+ref-bwabam=./02.aln/E.bam
+
+-----------------------------------------------------------------
+
+## ==> PBS.example <==
+-----------------------------------------------------------------
+#!/bin/bash
+#PBS -N mpi_template
+#PBS -l nodes=1:ppn=10
+#PBS -l walltime=01:40:00
+#PBS -j oe
+#PBS -q mem.q
+NSLOTS=`cat ${PBS_NODEFILE} | wc -l`
+cd  $PBS_O_WORKDIR
+source /public/software/mpi/openmpi1.3.4-gnu.sh
+mpirun  -hostfile $PBS_NODEFILE -np $NSLOTS  \
+/public/software/namd/namd2.7-gcc-openmpi/namd2 \
+apoa1.namd >& namd.log
+-----------------------------------------------------------------

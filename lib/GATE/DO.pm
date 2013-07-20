@@ -2437,7 +2437,7 @@ sub runGATK ($$) {
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 		}else{
-			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
+			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\s]+)\.bam/);
 			$callVar_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
 			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= "\${samtools} index $rmdupbam.bam";
