@@ -2052,7 +2052,7 @@ sub runBowtie($$) {
 				my $merge_bam=join " INPUT=",@bam;
 				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.bam\n";
-				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort - $lib.merge.rmdup.sort\n";
+				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
 				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
@@ -2066,7 +2066,7 @@ sub runBowtie($$) {
 				}
 				$bowtie_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
 				$bowtie_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam\n";
-				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |samtools rmdup -S - - | $samtools sort -@ 8 -m 1G - $lib.merge.rmdup.sort\n";
+				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort -@ 8 -m 1G - $lib.merge.rmdup.sort\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
 				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
@@ -2313,7 +2313,7 @@ sub runGATK ($$) {
 				my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$CreateSequenceDictionary=(exists $self->{"software:CreateSequenceDictionary"})?$self->{"software:CreateSequenceDictionary"}:qq($picardpath/CreateSequenceDictionary.jar);
 				$CreateSequenceDictionary=correctJavaCmd($CreateSequenceDictionary,"\${heap}");
-				my $ref_prefix=$1 if ($reference=~/([^\/\s]+)\.fa/i);
+				my $ref_prefix=$1 if ($reference=~/([^\s]+)\.fa/i);
 				$callVar_cmd .= "$CreateSequenceDictionary R=\$REFERENCE O=$ref_prefix\.dict CREATE_INDEX=true CREATE_MD5_FILE=true TRUNCATE_NAMES_AT_WHITESPACE=true VALIDATION_STRINGENCY=STRICT\n";
 			}
 		}
@@ -2437,8 +2437,8 @@ sub runGATK ($$) {
 				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			}
 		}else{
-			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\s]+)\.bam/);
-			$callVar_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
+			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
+			$callVar_cmd .= "\${samtools} rmdup $bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
 			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 			$callVar_cmd .= "\${samtools} index $rmdupbam.bam";
 			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
