@@ -70,7 +70,7 @@ sub qc($) {
 
 sub aln($) {
 	my $self=shift;
-	$self->runBWA().$self->runTopHat().$self->runMAQ();
+	$self->runBWA().$self->runTopHat();
 }
 
 sub var($) {

@@ -4317,7 +4317,7 @@ sub check_fileformat ($) {
 		} elsif ($file=~/bfa/i) {
 			return "bfa";
 		} elsif ($file=~/bfq/i) {
-			return "$bfq";
+			return "bfq";
 		}
 	} elsif (-T $file) {
 		if ($file=~/sam/i) {
