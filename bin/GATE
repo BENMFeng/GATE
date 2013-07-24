@@ -40,7 +40,7 @@ use GATE::Element;
                                          
 
 GATE --  Genomics integrated Applications, also for Transcriptomics, Epigenetics, Evolution experiential analysis pipeline. 
-Mainly suitable for illumina sequencing platform
+Mainly suitable for generating batch jobs of applications for illumina sequencing platform.
 
 =head1 Version
 
