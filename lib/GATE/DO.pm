@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1,07-16-2013";
+$VERSION = "1.1a,07-24-2013";
 package GATE::Element;
 #package GATE::Extension;
 use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
@@ -1944,7 +1944,7 @@ sub runBWA($$) {
 
 sub runBowtie($$) {
 	my ($self,$ref) = @_;
-	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"}) {
+	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"} || defined $self->{"software:tophat"}) {
 		return "";
 	}
 	$ref ||= 'ref';
@@ -2082,11 +2082,209 @@ sub runBowtie($$) {
 	return ($bowtie_cmd);
 }
 
-sub runSOAP ($) {
+## SOAPaligner v2.21
+#<ExecutablePath>/2bwt-builder <FastaPath/YourFasta>
+#./soap –a <reads_a> -D <index.files> -o <output></output>
+#./soap –a <reads_a> -b <reads_b> -D <index.files> -o <PE_output> -2 <SE_output> -m <min_insert_size> -x <max_insert_size>
+sub runSOAP ($$) {
+	my $self=shift;
+	my $ref=shift;
+	if (!exists $self->{"software:soap"} || !-e $self->{"software:soap"} || !defined $self->{"software:soap"}) {
+		return "";
+	}
+	$ref ||= 'ref';
+	my $soap_cmd = qq(echo `date`; echo "run SOAPaligner"\n);
+	$soap_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	my $soap = checkPath($self->{"software:soap"});
+	my $soap_path = $1 if (defined $soap && $soap=~/(\S+)\/soap/);
+	my $builder;
+	if (defined $self->{"software:2bwt-builder"}) {
+		$builder=checkPath($self->{"software:2bwt-builder"});
+	} else {
+		$builder=checkPath("$soap_path/2bwt-builder");
+	}
+	$soap_cmd .= qq(export soap="$soap"\n);
+	$soap_cmd .= qq(export soapbuilder="$builder"\n);
+	my $reference=checkPath($self->{"database:$ref"});
+	$soap_cmd .= "\${soapbuilder} \$reference\n" unless (checkIndex('soap',$reference)==1);
+	$soap_cmd .= "export REFERENCE=$reference\.index\.\n";
+	my $soappara=$self->{'CustomSetting:soap'};
+	$soap_cmd .= qq(export soappara="$soappara"\n);
+	my $soap2sam = checkPath($self->{"software:soap2sam.pl"}) if (exists $self->{"software:soap2sam.pl"});
+	$soap_cmd .= qq(export soap2sam="$soap2sam") if (defined $soap2sam);
+	my $samtools = checkPath($self->{"software:samtools"});
+	$soap_cmd .= qq(export samtools="$samtools"\n);
+	$soap_cmd .= "\${samtools} faidx \$reference\n" unless (checkIndex('samtools',$reference)==1);
+	$soap_cmd .= qq(perl -e 'open \(FAI,"$reference.fai"\);while\(<FAI>\){chomp;my \@t=split;print "\\\@SQ\\tSN:\$t[0]\\tLN:\$t[1]\\n"}close FAI;" > $reference.inh.sam) if (defined $samtools);
 	
+	my $workdir=checkPath($self->{"-workdir"});
+	$soap_cmd.="export workdir=$workdir\n";
+	$soap_cmd.=qq(cd \$workdir\n);
+	my $soap_outdir = (exists $self->{"CustomSetting:soap_outdir"})? $self->{"CustomSetting:soap_outdir"} : (exists $self->{"CustomSetting:aln_outdir"}) ? $self->{"CustomSetting:aln_outdir"} : "soap";
+	$soap_cmd .= "[[ -d $soap_outdir ]] || mkdir $soap_outdir\n" if (!-d qq($self->{"-workdir"}/$soap_outdir));
+	$soap_cmd .= "cd $soap_outdir\n";
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my @bam=();
+	foreach my $lib(@libraries) {
+		$soap_cmd .= "[[ -d $lib ]] || mkdir $lib\n" if (!-d qq($self->{"-workdir"}/$soap_outdir/$lib));
+		$soap_cmd .= "cd $lib\n";
+		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		if (exists $fq{1} && exists $fq{2}){
+			my @fq1=@{$fq{1}};
+			my @fq2=@{$fq{2}};
+			for (my $j=0;$j<@fq2;$j++) {
+				my $reads_a = $fq1[$j];
+				my $reads_b = $fq2[$j];
+
+				my $PI=(exists $self->{$lib}{'fq1'}{$j}{'PI'})?$self->{$lib}{'fq1'}{$j}{'PI'}:500;
+				my $m = $PI*0.9;
+				my $x = $PI*1.1;
+				if (@fq2>1) {
+					my $k=$j+1;
+					my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:"$lib-$k";
+					my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.$k.paired.soap -2 $lib.$k.unpaired.soap -m $m -x $x \{$soappara}\n);
+					if (defined $soap2sam) {
+						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
+						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.paired.soap > $lib.$k.paired.sam\n);
+						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.unpaired.soap > $lib.$k.unpaired.sam\n);
+						$soap_cmd .= qq(cat $lib.$k.paired.sam $lib.$k.unpaired.sam > $lib.$k.pair.sam\n);
+						$soap_cmd .= qq(cat $lib.inh.sam $lib.$k.pair.sam | \${samtools} view -Sbh - -o $lib.$k.paired.bam && \${samtools} index $lib.$k.pair.bam && );
+						$soap_cmd .= qq(\${samtools} sort -m 3000000000 $lib.$k.pair.bam $lib.$k.pair.sort && \${samtools} index $lib.$k.pair.sort.bam \n);
+						push @bam,"$lib.$k.pair.sort.bam";
+					}
+				} else {
+					my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
+					my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq1'}{$j}{'LB'})?$self->{$lib}{'fq1'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq1'}{$j}{'PL'})?$self->{$lib}{'fq1'}{$j}{'PL'}:"ILLUMINA";
+					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.pair.soap -2 $lib.single.soap -m $m -x $x \{$soappara}\n);
+					if (defined $soap2sam) {
+						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
+						$soap_cmd .= qq(\${soap2sam} -p $lib.paired.soap > $lib.paired.sam\n);
+						$soap_cmd .= qq(cat $lib.paired.sam $lib.unpaired.sam > $lib.pair.sam\n);
+						$soap_cmd .= qq(cat $lib.inh.sam $lib.sam |samtools view -Sbh - -o $lib.paired.bam && samtools index $lib.paired.bam && );
+						$soap_cmd .= qq(\${samtools} sort -m 3000000000 $lib.pair.bam $lib.pair.sort && \${samtools} index $lib.pair.sort.bam\n);
+						push @bam,"$lib.pair.sort.bam";
+					}
+
+				}
+			}
+		}
+		if (exists $fq{0} && @{$fq{0}}>0){
+			my @fq=@{$fq{0}};
+			for (my $j=0;$j<@fq;$j++) {
+				my $reads_a = $fq{$j};
+				if (@fq>1) {
+					my $k=$j+1;
+					my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:"$lib-$k";
+					my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$soap_cmd .= qq(\${soap} -a $reads_a -D \${REFERENCE} -o $lib.$k.single.soap \{$soappara}\n);
+					if (defined $soap2sam) {
+						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
+						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.single.soap > $lib.$k.single.sam\n);
+						$soap_cmd .= qq(cat $lib.inh.sam $lib.$k.single.sam |samtools view -Sbh - -o $lib.$k.single.bam && samtools index $lib.$k.single.bam && ); 
+						$soap_cmd .= qq(\${samtools} sort -m 3000000000 $lib.$k.single.bam $lib.$k.single.sort && \${samtools} index $lib.$k.single.sort.bam\n);
+						push @bam,"$lib.$k.single.sort.bam";
+					}
+				} else {
+					my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:$lib;
+					my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
+					my $LB=(exists $self->{$lib}{'fq'}{$j}{'LB'})?$self->{$lib}{'fq'}{$j}{'LB'}:$lib;
+					my $PL=(exists $self->{$lib}{'fq'}{$j}{'PL'})?$self->{$lib}{'fq'}{$j}{'PL'}:"ILLUMINA";
+					my $rg=qq('\@RG\\tID:$ID\\tPL:$PL\\tLB:$LB\\tSM:$SM');
+					foreach my $rb(keys %{$self->{$lib}{'fq'}{$j}})
+					{
+						if ($rb=~/^([A-Z]{2})$/ && $rb ne 'ID' && $rb ne 'SM' && $rb ne 'LB' && $rb ne 'PL')
+						{
+							$rg=~s/\'$//;
+							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
+						}
+					}
+					$soap_cmd .= qq(\${soap} -a $reads_a -D \${REFERENCE} -o $lib.single.soap \{$soappara}\n);
+					if (defined $soap2sam) {
+						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
+						$soap_cmd .= qq(\${soap2sam} -p $lib.single.soap > $lib.single.sam\n);
+						$soap_cmd .= qq(cat $lib.inh.sam $lib.single.sam |samtools view -Sbh - -o $lib.single.bam && samtools index $lib.single.bam && );
+						$soap_cmd .= qq(\${samtools} sort -m 3000000000 $lib.single.bam $lib.single.sort && \${samtools} index $lib.single.sort.bam\n);
+						push @bam,"$lib.single.sort.bam";
+					}
+				}
+			}
+			if (@bam>1) {
+				my $merge_bam="";
+				my $MergeSamFiles;
+				if (exists $self->{"software:picard"}) {
+					$MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+					$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
+					if (defined $MergeSamFiles && $MergeSamFiles ne "") {
+						my $MergeSamFilesPara=(exists $self->{"CustomSetting:MergeSamFiles"})?$self->{"CustomSetting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
+						$merge_bam=join " INPUT\=",@bam;
+						$soap_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam\n";
+						if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
+						{
+							$soap_cmd .= qq(rm -rf ./tmp_merge);
+							$soap_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+						}
+						$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$lib.merge.bam";
+					}
+				} 
+				else {
+					$merge_bam=join " ",@bam;
+					$soap_cmd .=  qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" > $lib.inh.sam);
+
+					foreach my $soapbam(@bam)
+					{
+						$soap_cmd .=  qq(\${samtools} view -H $soapbam |grep "^\@RG" >> $lib.inh.sam\n);
+					}
+					$soap_cmd .=  qq(\${samtools} view -H $bam[0] |grep "^\@PG" >> $lib.inh.sam);
+
+					$soap_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
+					$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$lib.merge.bam";
+				}
+			} else {
+				$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$bam[0]";
+			}
+			
+		}
+		$soap_cmd .= "cd ../\n";
+	}
+	$soap_cmd .= "cd ..\n";
+	return ($soap_cmd);	
 }
 
-sub runTopHat($) {
+sub runTopHat($$) {
 	my $self=shift;
 	my $ref=shift;
 	if (!exists $self->{"software:tophat"} || !-e $self->{"software:tophat"} || !defined $self->{"software:bowtie"}) {
@@ -2377,7 +2575,7 @@ sub runGATK ($$) {
 					}
 					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep "^\@PG" >> $lib.inh.sam);
 					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-					$callVar_cmd .=  "\${samtools}merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
+					$callVar_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
 					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
 					$bam="$lib.merge.bam";
 				}
@@ -4234,7 +4432,14 @@ sub checkIndex($$) {
 		} else {
 			return 1;
 		}
-	} elsif ($soft eq "blast") {
+	} elsif ($soft eq "soap") {
+		my $index=glob("$db.index*");
+		if (@index>0) {
+			return 1;
+		} else {
+			return 0;
+		}
+	} elsif ($soft eq "blast" || $soft eq "formatdb") {
 		
 	}
 }

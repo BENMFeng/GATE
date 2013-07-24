@@ -78,8 +78,6 @@ my %default_attrs = (
     -verbose    => 1,
 
     # default options
-    "software:getAlnGene" => './bin/getAlnGene.pl',
-    "software:PlotGeneSplicng.pl" => './bin/PlotGeneSplicng.pl',
     "CustomSetting:MergeSamFiles" => 'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT',
     "CustomSetting:bwaaln"  => '-t 12 -n 2 -q 10',
     "CustomSetting:tophat"  => '-p 12 -r 200',
