@@ -4433,7 +4433,7 @@ sub checkIndex($$) {
 			return 1;
 		}
 	} elsif ($soft eq "soap") {
-		my $index=glob("$db.index*");
+		my @index=glob("$db.index*");
 		if (@index>0) {
 			return 1;
 		} else {
