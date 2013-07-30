@@ -6,7 +6,7 @@ use Getopt::Long;
 my ($Edge,$Detail,$Len_p,$Len_t,$SubStr,$TrimMode,$Homopolymer,$APmode,$APdb,$Mismatch,$Prefix,$Verbose,$Help);
 my %opts;
 GetOptions(\%opts,"trim_detail:s"=>\$Detail,"edge:i"=>\$Edge,"len_p:s"=>\$Len_p,"len_t:i"=>\$Len_t,"mis:i"=>\$Mismatch,
-"sub:i"=>\$SubStr,"trim_mode:s"=>\$TrimMode,"trim_polymer:s"=>\$Homopolymer,"ap_mode"=>\$APmode,"ap_db:s"=>\$APdb,"prefix:s"=>\$Prefix,
+"sub:s"=>\$SubStr,"trim_mode:s"=>\$TrimMode,"trim_polymer:s"=>\$Homopolymer,"ap_mode"=>\$APmode,"ap_db:s"=>\$APdb,"prefix:s"=>\$Prefix,
 "verbose"=>\$Verbose,"help"=>\$Help);
 my $usage = qq(
 trim_seq.pl -- trim fasta or fastq according to filter_adapter details
