@@ -1,4 +1,4 @@
-
+## The config file should be set as below, offering the information what you need, whereas the other which you don't need can be ignored.
 ## ==>config.example<==
 -----------------------------------------------------------------
 [database]
@@ -45,7 +45,7 @@ AlternativeSplicing=./bin/AlternativeSplicing.jar
 SamToFastq=./bin/SamToFastq.jar
 GenePlot=/home/bio/pub/GATE/bin/GenePlot.pl
 
-[CustomSetting]
+[setting]
 PATH=/home/bio/pub/GATE/bin/:/home/bio/bin/
 RSeQCPATH=/usr/local/bin/
 PYTHONPATH=/usr/local/lib/python2.7/site-packages

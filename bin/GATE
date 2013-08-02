@@ -188,6 +188,7 @@ trim_seq=-ap_db \$AP -edge 3 -len_t 25 -len_p 0.25 -trim_mode both -ap_mode -ver
 # quality control outdir
 qc_outdir=qc
 
+[rule]
 # if 'clean=yes' or 'clean=TRUE' it will clean the interval files
 clean=yes
 
