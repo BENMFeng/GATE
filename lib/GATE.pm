@@ -16,7 +16,7 @@ use lib "$FindBin::Bin/../lib";
 use File::Basename qw(basename dirname);
 use GATE::Element;
 #use GATE::Extension;
-@ISA = qw(GATE::Element GATE::DO);
+@ISA = qw(GATE::Element GATE::DO GATE::ALIAS GATE::Error);
 #@ISA = qw(GATE::Element GATE::Extension GATE::DO);
 
 
@@ -78,31 +78,31 @@ my %default_attrs = (
     -verbose    => 1,
 
     # default options
-    "CustomSetting:MergeSamFiles" => 'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT',
-    "CustomSetting:bwaaln"  => '-t 12 -n 2 -q 10',
-    "CustomSetting:tophat"  => '-p 12 -r 200',
-    "CustomSetting:cufflinks" => '-p 12 -u',
-    "CustomSetting:cuffmerge" => '-p 12',
-    "CustomSetting:cuffcompare" => '-R -T -V -CG',
-    "CustomSetting:cuffdiff" => '-p 12 -u --geometric-norm',
-    "CustomSetting:PATH" => '/usr/local/bin',
-    "CustomSetting:PYTHONPATH" => '/usr/local/lib/python2.7/site-packages',
-    "CustomSetting:heap" => "4g",
-    "CustomSetting:multithreads" => 4,
-    "CustomSetting:qsub" => "-cwd -l cpu=12,vf=16G",
-    "CustomSetting:mergeOverlapPE" => "-seed 11",
-    "CustomSetting:filterPCRdup" => "-cmp 100",
-    "CustomSetting:scanAP" => "-k 10 -e 3 -m 10 -l",
-    "CustomSetting:fastqcut" => "-q 20 -f L -n 5 -len 35 -sd 10 -trim",
-    "CustomSetting:trim_seq" => "-edge 3 -len_t 25 -len_p 0.25 --trim_mode both --ap_mode -verbose",
-    "CustomSetting:qc_outdir" => "qc",
-    "CustomSetting:SolexaQA" => "-v -m -s 10000 -b -sanger",
+    "setting:MergeSamFiles" => 'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT',
+    "setting:bwaaln"  => '-t 12 -n 2 -q 10',
+    "setting:tophat"  => '-p 12 -r 200',
+    "setting:cufflinks" => '-p 12 -u',
+    "setting:cuffmerge" => '-p 12',
+    "setting:cuffcompare" => '-R -T -V -CG',
+    "setting:cuffdiff" => '-p 12 -u --geometric-norm',
+    "setting:PATH" => '/usr/local/bin',
+    "setting:PYTHONPATH" => '/usr/local/lib/python2.7/site-packages',
+    "setting:heap" => "4g",
+    "setting:multithreads" => 4,
+    "setting:qsub" => "-cwd -l cpu=12,vf=16G",
+    "setting:mergeOverlapPE" => "-seed 11",
+    "setting:filterPCRdup" => "-cmp 100",
+    "setting:scanAP" => "-k 10 -e 3 -m 10 -l",
+    "setting:fastqcut" => "-q 20 -f L -n 5 -len 35 -sd 10 -trim",
+    "setting:trim_seq" => "-edge 3 -len_t 25 -len_p 0.25 --trim_mode both --ap_mode -verbose",
+    "setting:qc_outdir" => "qc",
+    "setting:SolexaQA" => "-v -m -s 10000 -b -sanger",
 
-    "CustomSetting:aln_outdir" => "aln",
-    "CustomSetting:var_outdir" => "var",
-    "CustomSetting:as_outdir" => "as",
+    "setting:aln_outdir" => "aln",
+    "setting:var_outdir" => "var",
+    "setting:as_outdir" => "as",
 
-    "CustomSetting:PBS-header" => qq(#!/bin/bash
+    "setting:PBS-header" => qq(#!/bin/bash
 #PBS -N  mpi_template
 #PBS -l nodes=1:ppn=10
 #PBS -l walltime=01:40:00

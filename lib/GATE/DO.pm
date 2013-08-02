@@ -19,18 +19,25 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1a,07-24-2013";
+$VERSION = "1.1b,08-02-2013";
 package GATE::Element;
 #package GATE::Extension;
+use GATE::ALIAS;
+use GATE::Error;
 use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
 use lib "$FindBin::Bin/../lib";  ## Bin live in the lib
 use File::Basename qw(basename dirname);
 use Cwd;
 
+#########################################################
+#                                                       #
+#                    Configure                          #
+#                                                       #
+#########################################################
 
 sub parseConfig($) {
 	my $self = shift;
-	my $file=checkPath($self->{'-config'});
+	my $file=GATE::Error::checkPath($self->{'-config'});
 	my ($name,$index,$barcode,$lib,$mergepe)=("","","","",""); 
 	my %RG;
 	my %countSample;
@@ -39,14 +46,16 @@ sub parseConfig($) {
 		chomp;
 		next if ($_ eq "" || $_=~/^\#/);
 		if (/[\[\<](.*)[\]\>]/) {
-			$name=$1;
+			$name=GATE::ALIAS::alias($1);
 			if ($name eq "LIB")
 			{
 				($index,$barcode,$lib,$mergepe)=("","","","");
 				delete @RG{keys %RG};
 				%RG=();
 			}
+			next;
 		}
+		next if ($name eq "");
 		if ($name eq "INPUT") {
 			if (/^([A-Z]{2})\=([^\=]+)/) {
 				my ($rg,$info)=($1,$2);
@@ -55,7 +64,7 @@ sub parseConfig($) {
 			} elsif (/([^\=]+)\=([^\=]+)/) {
 				my ($lb,$path)=($1,$2);
 				$self->{'LIB'}{$lib}{$name}{$lb}++;
-				$self->{$lib}{$lb}[$self->{'LIB'}{$lib}{$name}{$lb}-1]=checkPath($path);
+				$self->{$lib}{$lb}[$self->{'LIB'}{$lib}{$name}{$lb}-1]=GATE::Error::checkPath($path);
 			}
 		} elsif ($name eq "LIB") {
 			if (/Label\=([^\=]+)/ || /LIB\=([^\=]+)/) {
@@ -73,7 +82,7 @@ sub parseConfig($) {
 				if (/([^\=]+)\=([^\=]+)/){
 					my ($type,$path)=($1,$2);
 					$countSample{"$name $lib $type"}++;
-					${$self->{$name}{$lib}{$type}}[$countSample{"$name $lib $type"}-1]=checkPath($path);
+					${$self->{$name}{$lib}{$type}}[$countSample{"$name $lib $type"}-1]=GATE::Error::checkPath($path);
 					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'Index'}=$index if (defined $index && $index ne "");
 					$self->{'idx'}{$lib}=1 if (defined $index && $index ne "");
 					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'Barcode'}=$barcode if (defined $barcode && $barcode ne "");
@@ -91,48 +100,20 @@ sub parseConfig($) {
 				$RG{$rg}=$info;
 				$lib=$1 if (/LB\=([^\=]+)/);
 			}
+		} elsif ($name =~ /rule/i) {
+			$self->{"$name:$lib"}{$1}=$2 if (/([^\=]+)\=([^\=]+)/);
 		} else {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($lib,$path)=($1,$2);
-				$path=checkPath($path) if ($name=~/database/ || $name=~ /software/);
-				$self->{"$name:$lib"} = $path;
+				if ($name =~ /database/ || $name =~ /software/) {
+					$path=GATE::Error::checkPath($path); 
+					$self->{"$name:$lib"} = $path;
+				}
 			}
 		}
 	}
 	close IN;
 	return bless($self);
-}
-
-sub checkPath{
-	my $path=shift;
-	#print STDERR "path=$path\n";
-	if (defined $path && $path !~ /^\//) {
-		if($path=~/\s([^\/\s]+\/\S+)/) {
-			my $d=$1;
-			my ($dir,$file)=($1,$2) if ($d=~/(\S+\/)([^\/\s]+)$/);
-			if (-d $dir && -f $d) {
-				my $rawdir=`pwd`;
-				chomp $rawdir;
-				chdir($rawdir);
-				chdir($dir);
-				my $targetdir=`pwdf`;
-				chomp $targetdir;
-				chdir($rawdir);
-				$path="$targetdir/$file";
-			} else {
-				print STDERR get_time()."\t\t$path error: folder $dir or file $d doesn't exist\n";
-				die();
-			}
-		}
-	} else {
-		if (defined $path &&  $path=~/^(\/\S+)/) {
-			if (!-d $1 && !-f $1) {
-				print STDERR get_time()."\t\t$path error: folder or file doesn't exist\n";
-				die();
-			}
-		}
-	}
-	return $path;
 }
 
 sub parseDir($) {
@@ -145,6 +126,163 @@ sub parseDir($) {
 	$Workdir="$workpath/$Workdir" if ($Workdir !~ /^\//);
 	$Workdir=~s/[\/\s\.]+$//;
 	$self->{'-workdir'}=$Workdir;
+}
+
+sub getlibSeq ($) {
+	my $lib=shift;
+	my %Seq=();
+	for my $i(sort keys %$lib) {
+		if (exists $lib->{$i}) {
+			my ($A,$B)=($1,$2) if ($i=~/(\w+)([12])/);
+			foreach my $reads(@{$lib->{$i}}) {
+				if (defined $A && defined $B) {
+					my $C=($B==1)?2:1;
+					if (exists $lib->{"$A$C"}) {
+						push @{$Seq{$B}},$reads;
+					} else {
+						push @{$Seq{0}},$reads;
+					}
+				} else {
+					push @{$Seq{0}},$reads;
+				}
+			}
+		}
+	}
+	return %Seq;
+}
+
+
+
+sub correctJavaCmd
+{
+	my ($tools,$heap,$Djavaio)=@_;
+	my $cmd="java";
+	my $init="40m";
+	if (defined $tools && $tools !~ /^java/ && $tools !~ /\-jar/)
+	{
+		if (defined $heap)
+		{
+			if ($heap=~/(\d+)(\w+)/) {
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10)."$unit";
+			} elsif ($heap=~/(\d+)$/) {
+				$heap.="m";
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10).$unit;
+			}
+			$init="40m" if ($init =~ /^0/);
+			$cmd.=" -Xms$init -Xmx$heap";
+		}
+		if (defined $Djavaio)
+		{
+			$cmd.=" -Djava.io.tmpdir=$Djavaio";
+		}
+		$cmd.=" -jar $tools";
+	}
+	else
+	{
+		$cmd=$tools;
+		if (defined $heap && $cmd !~ /\-Xmx/)
+		{
+			if ($heap=~/(\d+)(\w+)/) {
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10)."unit";
+			} elsif ($heap=~/(\d+)$/) {
+				$heap.="m";
+				my ($mem,$unit)=($1,$2);
+				$init=int($mem/10).$unit;
+			}
+			$init="40m" if ($init =~ /^0/);
+			$cmd=~s/java/java\ -Xms$init \-Xmx$heap\ /;
+		}
+		if (defined $Djavaio && $cmd !~ /\-Djava/)
+		{
+			$cmd=~s/\-jar/\-Djava\.io\.tmpdir\=$Djavaio\ \-jar/;
+		}
+	}
+	return $cmd;
+}
+
+sub check_fileformat ($) {
+	my $file=shift;
+	if (-B $file) {
+		if ($file=~/bam$/i)
+		{
+			my $index=GATE::Error::checkIndex('samtools',$file);
+			if ($index==1)
+			{
+				return "bam";
+			}
+		} elsif ($file=~/fasta.gz$/i || $file=~/fa.gz$/i) {
+			return "fasta.gz";
+		} elsif ($file=~/fastq.gz$/i || $file=~/fq.gz$/i) {
+			return "fastq.gz";
+		} elsif ($file=~/gz$/i) {
+			open (IN,"zcat $file|");
+			my $line=<IN>;
+			if ($line=~/^\>/) {
+				return "fasta.gz";
+			} elsif ($line=~/^\@/) {
+				return "fastq.gz";
+			}
+			close IN;
+		} elsif ($file=~/sff/i) {
+			return "sff";
+		} elsif ($file=~/bfa/i) {
+			return "bfa";
+		} elsif ($file=~/bfq/i) {
+			return "bfq";
+		}
+	} elsif (-T $file) {
+		if ($file=~/sam/i) {
+			return "sam";
+		} elsif ($file=~/fasta$/i || $file=~/fa$/i || $file=~/seq/i || $file=~/fna/i || $file=~/fas/i) {
+			return "fasta";
+		} elsif ($file=~/fastq$/i || $file=~/fq/i) {
+			return "fastq";
+		} else {
+			open (IN,$file);
+			my $line=<IN>;
+			if ($line=~/^\>/) {
+				return "fasta";
+			} elsif ($line=~/^\@/) {
+				return "fastq";
+			}
+			close IN;
+		}
+	}
+}
+
+sub print_check_process {
+	my @ary=@_;
+	my $out="";
+	my $process = join " ",@ary;
+	my $grep="";
+	foreach my $p (@ary) {
+		$grep .= " \| grep $p";
+	}
+	$out .= qq(user=`whoami`\np=\`ps -u \$user -f $grep | grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f $grep | grep -v grep\`\ndone\n);
+	return $out;
+}
+
+sub get_time ($) {
+	my $self=shift;
+	my  ($sec,$min,$hour,$mday,$mon,$year) = (localtime)[0..5];
+	($sec,$min,$hour,$mday,$mon,$year) = (
+		sprintf("%02d", $sec),
+		sprintf("%02d", $min),
+		sprintf("%02d", $hour),
+		sprintf("%02d", $mday),
+		sprintf("%02d", $mon + 1),
+		$year + 1900
+	);
+	$self->{year}=$year;
+	$self->{month}=$mon;
+	$self->{day}=$mday;
+	$self->{hour}=$hour;
+	$self->{minute}=$min;
+	$self->{second}=$sec;
+	return "## $year-$mon-$mday $hour:$min:$sec\n";
 }
 
 #########################################################
@@ -165,11 +303,11 @@ sub runPhred ($) {
 	my $phred_cmd =  qq(echo `date`; echo "run Phred"\n);
 	$phred_cmd .= qq(export PHRED_PARAMETER_FILE=$phredpar\n) if (defined $phredpar);
 	$phred_cmd .= qq(export phred=$phred\n) if (defined $phred);
-	my $para = (exists $self->{"CustomSetting:phred"}) ? $self->{"CustomSetting:phred"} : qq(-trim_cutoff 0.01 -trim_alt \\'\\' -trim_fasta);
+	my $para = (exists $self->{"setting:phred"}) ? $self->{"setting:phred"} : qq(-trim_cutoff 0.01 -trim_alt \\'\\' -trim_fasta);
 	$phred_cmd .= qq(export phredpara="$para"\n) if (defined $para);
 	$phred_cmd .= qq(cd $self->{"-workdir"}\n);
-	$phred_cmd .= qq(export bc_outdir=$self->{"CustomSetting:bc_outdir"}\n);
-	$phred_cmd .= qq([[ -d \${bc_outdir} || mkdir \${bc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}));
+	$phred_cmd .= qq(export bc_outdir=$self->{"setting:bc_outdir"}\n);
+	$phred_cmd .= qq([[ -d \${bc_outdir} || mkdir \${bc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:bc_outdir"}));
 	$phred_cmd .= qq(cd \${bc_outdir}\n);
 	$phred_cmd .= qq([[ -d phred ]] || mkdir phred\n);
 	$phred_cmd .= qq(cd phred\n);
@@ -193,8 +331,8 @@ sub runPhred ($) {
 				$phred_cmd .= qq(\${phred} \${phredpara}-id $dirname/ -sd $dirname/seq_dir/ -qd $dirname/qual_dir/\n);
 				$phred_cmd .= qq(cat $dirname/seq_dir/*.seq > $lib.$dirname.seq\n);
 				$phred_cmd .= qq(cat $dirname/qual_dir/*.qual > $lib.$dirname.qual\n);
-				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.$dirname.seq);
-				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}/$lib/$lib.$dirname.qual);
+				push @{$self->{"LIB"}{$lib}{"seq"}},qq($self->{"-workdir"}/$self->{"setting:bc_outdir"}/$lib/$lib.$dirname.seq);
+				push @{$self->{"LIB"}{$lib}{"qual"}},qq($self->{"-workdir"}/$self->{"setting:bc_outdir"}/$lib/$lib.$dirname.qual);
 				$phred_cmd .= qq(cd ..\n);
 				$gotseq++;
 			}
@@ -208,18 +346,18 @@ sub runPhred ($) {
 sub runCASAVA ($) {
 	my $self = shift;
 	my $CASAVA_PATH="";
-	if (exists $self->{'CustomSetting:CASAVA_PATH'}) {
-		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVA_PATH'});
-	} elsif (exists $self->{'CustomSetting:CASAVAPATH'}){
-		$CASAVA_PATH=checkPath($self->{'CustomSetting:CASAVAPATH'});
+	if (exists $self->{'setting:CASAVA_PATH'}) {
+		$CASAVA_PATH=GATE::Error::checkPath($self->{'setting:CASAVA_PATH'});
+	} elsif (exists $self->{'setting:CASAVAPATH'}){
+		$CASAVA_PATH=GATE::Error::checkPath($self->{'setting:CASAVAPATH'});
 	} elsif (exists $self->{'software:CASAVA'}){
-		$CASAVA_PATH=checkPath($1) if (/(\S+)\/bin/);
+		$CASAVA_PATH=GATE::Error::checkPath($1) if (/(\S+)\/bin/);
 	}
-	my $para = (exists  $self->{'CustomSetting:CASAVA'}) ? $self->{'CustomSetting:CASAVA'} : '--fastq-cluster-count 0 --mismatches 1'; 
+	my $para = (exists  $self->{'setting:CASAVA'}) ? $self->{'setting:CASAVA'} : '--fastq-cluster-count 0 --mismatches 1'; 
 	my $casava_cmd = qq(echo `date`; echo "run CASAVA"\n);
 	$casava_cmd .= qq(export CASAVA_PATH=$CASAVA_PATH\n) if (defined $CASAVA_PATH);
 	$casava_cmd .= qq(export CASAVA_para="$para"\n);
-	$casava_cmd .= qq([[ -d \${bc_outdir} || mkdir \${bc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:bc_outdir"}));
+	$casava_cmd .= qq([[ -d \${bc_outdir} || mkdir \${bc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:bc_outdir"}));
 	$casava_cmd .= qq(cd \${bc_outdir}\n);
 	$casava_cmd .= qq([[ -d casava ]] || mkdir casava\n);
 	$casava_cmd .= qq(cd casava\n);
@@ -268,22 +406,22 @@ sub selectIdxFastq ($) {
 	if (!exists $self->{"software:selectIdxFastq"} || !defined $self->{"software:selectIdxFastq"} || (!exists $self->{'idx'} && !exists $self->{'bar'})) {
 		return "";
 	}
-	my $selectIdxFastq=checkPath($self->{"software:selectIdxFastq"});
-	my $para=(exists $self->{"CustomSetting:selectIdxFastq"})?$self->{"CustomSetting:selectIdxFastq"}:"-mis 1 -qual 30";
+	my $selectIdxFastq=GATE::Error::checkPath($self->{"software:selectIdxFastq"});
+	my $para=(exists $self->{"setting:selectIdxFastq"})?$self->{"setting:selectIdxFastq"}:"-mis 1 -qual 30";
 	$para=~s/\-.+prefix\s+\S+//;
-	my $multirun=checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
-	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/selectIdxFastq.$$.sh);
+	my $multirun=GATE::Error::checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+	my $multirun_sh=(-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"})) ? qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/selectIdxFastq.$$.sh) : qq($self->{"-workdir"}/selectIdxFastq.$$.sh);
 	my $Idx_cmd = qq(echo `date`; echo "run selectIdxFastq"\n);
 	if (defined $multirun) {
 		open (IDX,">$multirun_sh");
 		$Idx_cmd .= qq(export multirun="$multirun"\n);
 	}
 	$Idx_cmd .= qq(cd $self->{"-workdir"}\n);
-	$Idx_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$Idx_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$Idx_cmd .= qq(export selectIdxFastq=$selectIdxFastq\n);
 	$Idx_cmd .= qq(export selectIdxFastq_para="$para"\n);
-	$Idx_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$Idx_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$Idx_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$Idx_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my $Idx_cmd_multi_head=$Idx_cmd;
 	my $Idx_cmd_multi = "";
 	my $withIdx=0;
@@ -292,11 +430,11 @@ sub selectIdxFastq ($) {
 		next if (!exists $self->{'idx'}{$lib} && !exists $self->{'bar'}{$lib});
 		$Idx_cmd_multi .= $Idx_cmd_multi_head;
 		$Idx_cmd .= qq(echo `date` && echo "$lib"\n);
-		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-		$Idx_cmd_multi .= qq(echo `date` && echo "$lib" && [[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$Idx_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+		$Idx_cmd_multi .= qq(echo `date` && echo "$lib" && [[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		if (defined $multirun) {
 			print IDX qq(echo `date` && echo "$lib" && );
-			print IDX qq([[ -d $lib ]] || mkdir $lib && cd $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			print IDX qq([[ -d $lib ]] || mkdir $lib && cd $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		}
 		$Idx_cmd .= "cd $lib\n";
 		$Idx_cmd_multi .= "cd $lib\n";
@@ -369,10 +507,10 @@ sub selectIdxFastq ($) {
 							print IDX qq( -barcode $barcode ) if (defined $barcode);
 							print IDX qq( && );
 						}
-						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
-						die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2));
-						${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
-						${$self->{"LIB"}{$lib}{"$lb$j"}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2);
+						die qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1));
+						die qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out2 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out2));
+						${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1);
+						${$self->{"LIB"}{$lib}{"$lb$j"}}[$k]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out2);
 						$withIdx++;
 					}
 				}
@@ -409,8 +547,8 @@ sub selectIdxFastq ($) {
 								print IDX qq( -barcode $barcode ) if (defined $barcode);
 								print IDX qq( && );
 							}
-							die qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1));
-							${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
+							die qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1 is existent!\n) if (-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1));
+							${$self->{"LIB"}{$lib}{$lbmark}}[$k]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1);
 							$withIdx++;
 						}
 					}
@@ -422,7 +560,7 @@ sub selectIdxFastq ($) {
 			$Idx_cmd_multi =~ s/\s+$//;
 			$Idx_cmd_multi =~ s/\&\&$//;
 		}
-		if ($withIdx % $self->{"CustomSetting:multithreads"}!=0)
+		if ($withIdx % $self->{"setting:multithreads"}!=0)
 		{
 			$Idx_cmd_multi .= " &\n";
 		} else {
@@ -438,14 +576,14 @@ sub selectIdxFastq ($) {
 	}
 	$Idx_cmd .= "cd ..\n";
 	if ($withIdx>0){
-		if (exists $self->{"CustomSetting:multimode"}) {
+		if (exists $self->{"setting:multimode"}) {
 			chomp $Idx_cmd_multi;
 			$Idx_cmd_multi=~s/\&+$//;
 			$Idx_cmd_multi.="\n";
 			$Idx_cmd_multi.=print_check_process('selectIdxFastq');
 			if (defined $multirun) {
 				my $multirun_cmd=$Idx_cmd_multi_head;
-				$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"CustomSetting:multithreads"}\n);
+				$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"setting:multithreads"}\n);
 				$multirun_cmd .= print_check_process('selectIdxFastq');
 				return $multirun_cmd;
 			} else {
@@ -465,18 +603,18 @@ sub mergeOverlapPE($) {
 	}
 	if (exists $self->{"software:mergeOverlapPE"}) {
 		my $mergeOverlapPE=$self->{"software:mergeOverlapPE"};
-		my $moppara = $self->{"CustomSetting:mergeOverlapPE"};
+		my $moppara = $self->{"setting:mergeOverlapPE"};
 		my $mop_cmd = qq(echo `date`; echo "run mergeOverlapPE"\n);
-		my $multirun=checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
-		my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/mergeOverlapPE.$$.sh);
+		my $multirun=GATE::Error::checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+		my $multirun_sh=(-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"})) ? qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/mergeOverlapPE.$$.sh) : qq($self->{"-workdir"}/mergeOverlapPE.$$.sh);
 		if (defined $multirun) {
 			open (MOP,">$multirun_sh");
 			$mop_cmd .= qq(export multirun="$multirun"\n);
 		}
 		$mop_cmd .= qq(cd $self->{"-workdir"}\n);
-		$mop_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-		$mop_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-		$mop_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+		$mop_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+		$mop_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+		$mop_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 		my $mop_cmd_multi_head=$mop_cmd;
 		my $mop_cmd_multi="";
 		my $withPE=0;
@@ -486,11 +624,11 @@ sub mergeOverlapPE($) {
 			$mop_cmd_multi.= $mop_cmd_multi_head;
 			$mop_cmd_multi .= qq(echo `date`; echo "$lib"\n);
 			$mop_cmd .= qq(echo `date`; echo "$lib"\n);
-			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 			if (defined $multirun) {
 				print MOP qq(echo `date` && echo "$lib" && );
-				print MOP qq([[ -d $lib ]] || mkdir $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+				print MOP qq([[ -d $lib ]] || mkdir $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 				print MOP qq(cd $lib && );
 			}
 			$mop_cmd .= "cd $lib\n";
@@ -504,7 +642,7 @@ sub mergeOverlapPE($) {
 			{
 				$mop_cmd .= "cd ../\n";
 				$mop_cmd_multi .= "cd ../";
-				if ($withPE % $self->{"CustomSetting:multithreads"}!=0)
+				if ($withPE % $self->{"setting:multithreads"}!=0)
 				{
 					$mop_cmd_multi .= " &\n";
 				} else {
@@ -521,15 +659,15 @@ sub mergeOverlapPE($) {
 					if (defined $multirun) {
 						print MOP "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
 					}
-					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
-					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
-					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
+					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$prefix\_R1.fastq);
+					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$prefix\_R2.fastq);
+					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$prefix\_merged.fastq);
 					foreach my $k(keys %{$self->{$lib}{'fq1'}{$i}})
 					{
 						$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{'fq'}}-1}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
 					}
 					$withPE++;
-					if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
+					if ($withPE % $self->{"setting:multithreads"} != 0)
 					{
 						$mop_cmd_multi .= " &\n";
 					} else {
@@ -546,14 +684,14 @@ sub mergeOverlapPE($) {
 		$mop_cmd .= "cd ..\n";
 		close MOP if (defined $multirun);
 		if ($withPE>0){
-			if (exists $self->{"CustomSetting:multimode"}) {
+			if (exists $self->{"setting:multimode"}) {
 				$mop_cmd_multi =~ s/\s+$//;
 				$mop_cmd_multi =~ s/\&+$//;
 				$mop_cmd_multi .= "\n";
 				$mop_cmd_multi .= print_check_process('mergeOverlapPE');
 				if (defined $multirun) {
 					my $multirun_cmd = $mop_cmd_multi_head;
-					$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"CustomSetting:multithreads"}\n);
+					$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"setting:multithreads"}\n);
 					$multirun_cmd .= print_check_process('mergeOverlapPE');
 					return $multirun_cmd;
 				} else {
@@ -565,12 +703,12 @@ sub mergeOverlapPE($) {
 		}
 	}elsif (exists $self->{"software:bwa-pemerge"}) {
 		my $bwapemerge=$self->{"software:bwa-pemerge"};
-		my $moppara = (exists $self->{"CustomSetting:bwa-pemerge"}) ? $self->{"CustomSetting:bwa-pemerge"} : "";
+		my $moppara = (exists $self->{"setting:bwa-pemerge"}) ? $self->{"setting:bwa-pemerge"} : "";
 		my $mop_cmd = qq(echo `date`; echo "run bwa-pemerge"\n);
 		$mop_cmd .= qq(cd $self->{"-workdir"}\n);
-		$mop_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-		$mop_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-		$mop_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+		$mop_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+		$mop_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+		$mop_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 		my $mop_cmd_multi_head=$mop_cmd;
 		my $mop_cmd_multi="";
 		my $withPE=0;
@@ -580,8 +718,8 @@ sub mergeOverlapPE($) {
 			$mop_cmd_multi.= $mop_cmd_multi_head;
 			$mop_cmd_multi .= qq(echo `date`; echo "$lib"\n);
 			$mop_cmd .= qq(echo `date`; echo "$lib"\n);
-			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$mop_cmd .= qq([[ -d $lib ]] || mkdir $lib\n)  unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 			$mop_cmd .= "cd $lib\n";
 			$mop_cmd_multi .= "cd $lib\n";
 			my %fq=getlibSeq($self->{"LIB"}{$lib});
@@ -593,7 +731,7 @@ sub mergeOverlapPE($) {
 			{
 				$mop_cmd .= "cd ../\n";
 				$mop_cmd_multi .= "cd ../";
-				if ($withPE % $self->{"CustomSetting:multithreads"}!=0)
+				if ($withPE % $self->{"setting:multithreads"}!=0)
 				{
 					$mop_cmd_multi .= " &\n";
 				} else {
@@ -606,12 +744,12 @@ sub mergeOverlapPE($) {
 				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$bwapemerge $moppara -m $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq\n";
-					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq && );
+					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"setting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq && );
 					$mop_cmd .= qq($bwapemerge $moppara -u $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}'\n);
-					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"CustomSetting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' && );
-					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R1.fastq);
-					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_R2.fastq);
-					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$prefix\_merged.fastq);
+					$mop_cmd_multi .= qq($bwapemerge $moppara -u -t $self->{"setting:multithreads"} $Reads1[$i] $Reads2[$i] | awk '\{if \(NR\%8<4\)\{print \$0 > "$prefix\_R1.fastq"\}else\{print \$0 > "$prefix\_R2.fastq"\}\}' && );
+					${$self->{"LIB"}{$lib}{'fq1'}}[$i]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$prefix\_R1.fastq);
+					${$self->{"LIB"}{$lib}{'fq2'}}[$i]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$prefix\_R2.fastq);
+					push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$prefix\_merged.fastq);
 					foreach my $k(keys %{$self->{$lib}{'fq1'}{$i}})
 					{
 						$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{'fq'}}-1}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
@@ -622,7 +760,7 @@ sub mergeOverlapPE($) {
 			$mop_cmd .= "cd ..\n";
 			$mop_cmd_multi =~ s/\s+$//;
 			$mop_cmd_multi =~ s/\&\&$//;
-			if ($withPE % $self->{"CustomSetting:multithreads"} != 0)
+			if ($withPE % $self->{"setting:multithreads"} != 0)
 			{
 				$mop_cmd_multi .= " &\n";
 			} else {
@@ -632,7 +770,7 @@ sub mergeOverlapPE($) {
 		}
 		$mop_cmd .= "cd ..\n";
 		if ($withPE>0){
-			if (exists $self->{"CustomSetting:multimode"}) {
+			if (exists $self->{"setting:multimode"}) {
 				chomp $mop_cmd_multi;
 				$mop_cmd_multi =~ s/\s+\&+$//;
 				$mop_cmd_multi .= "\n";
@@ -652,14 +790,14 @@ sub runQA($) {
 		return "";
 	}
 	if ( (exists $self->{"software:SolexaQA"} || -e $self->{"software:SolexaQA"}) ) {
-		my $SolexaQA=checkPath($self->{"software:SolexaQA"});
-		my $para=$self->{"CustomSetting:SolexaQA"};
+		my $SolexaQA=GATE::Error::checkPath($self->{"software:SolexaQA"});
+		my $para=$self->{"setting:SolexaQA"};
 		#SolexaQA.pl ../BF3.1.fq -v -m -s 10000 -b -sanger -d ./ 
 		my $qa_cmd = qq(echo `date`; echo "run SolexaQA"\n);
 		$qa_cmd .= qq(cd $self->{"-workdir"}\n);
-		$qa_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-		$qa_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-		$qa_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+		$qa_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+		$qa_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+		$qa_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 		my $qa_cmd_multi_head=$qa_cmd;
 		my $qa_cmd_multi="";
 		my $multi=0;
@@ -668,8 +806,8 @@ sub runQA($) {
 			$qa_cmd_multi.= $qa_cmd_multi_head;
 			$qa_cmd_multi .= qq(echo `date`; echo "$lib"\n);
 			$qa_cmd .= qq(echo `date`; echo "$lib"\n);
-			$qa_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$qa_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
 			$qa_cmd_multi .= "cd $lib\n";
@@ -681,7 +819,7 @@ sub runQA($) {
 						if (($reads !~ /fastq$/i && $reads !~ /fq$/i) || ($reads =~ /gz$/)) {
 							my $fq=(split /\//,$reads)[-1];
 							$fq=$1 if ($fq=~/(\S+)\.gz/);
-							if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/QA/$fq))
+							if (!-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/QA/$fq))
 							{
 								$qa_cmd .= "gzip -cd $reads > $fq\n";
 								$qa_cmd_multi .= "gzip -cd $fq && ";
@@ -702,7 +840,7 @@ sub runQA($) {
 				}
 			}
 			$qa_cmd .= "cd ..\n";
-			if ($multi % $self->{"CustomSetting:multithreads"}!=0){
+			if ($multi % $self->{"setting:multithreads"}!=0){
 				$qa_cmd_multi .= "&\n";
 			}else{
 				$qa_cmd_multi .= "\n";
@@ -711,7 +849,7 @@ sub runQA($) {
 			$multi++;
 		}
 		$qa_cmd .= "cd ..\n";
-		if (exists $self->{"CustomSetting:multimode"} && $self->{"CustomSetting:multimode"} =~ /y/i) {
+		if (exists $self->{"setting:multimode"} && $self->{"setting:multimode"} =~ /y/i) {
 			chomp $qa_cmd_multi;
 			$qa_cmd_multi=~s/\&+$//;
 			$qa_cmd_multi.="\n";
@@ -722,16 +860,16 @@ sub runQA($) {
 	}
 	if ( (exists $self->{"software:check_fastq"} || -e $self->{"software:check_fastq"}) )
 	{
-		my $check_fastq=checkPath($self->{"software:check_fastq"});
-		my $para=$self->{"CustomSetting:check_fastq"};
-		my $distribute_fqcheck=$self->{"CustomSetting:distribute_fqcheck"} if (exists $self->{"CustomSetting:distribute_fqcheck"});
+		my $check_fastq=GATE::Error::checkPath($self->{"software:check_fastq"});
+		my $para=$self->{"setting:check_fastq"};
+		my $distribute_fqcheck=$self->{"setting:distribute_fqcheck"} if (exists $self->{"setting:distribute_fqcheck"});
 		#SolexaQA.pl ../BF3.1.fq -v -m -s 10000 -b -sanger -d ./ 
 		my $qa_cmd = qq(echo `date`; echo "run check_fastq"\n);
-		$qa_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+		$qa_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 		$qa_cmd .= qq(export check_fastq="$check_fastq"\n);
 		$qa_cmd .= qq(cd $self->{"-workdir"}\n);
-		$qa_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-		$qa_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+		$qa_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+		$qa_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 		my $qa_cmd_multi_head=$qa_cmd;
 		my $qa_cmd_multi="";
 		my $multi=0;
@@ -740,8 +878,8 @@ sub runQA($) {
 			$qa_cmd_multi.= $qa_cmd_multi_head;
 			$qa_cmd_multi .= qq(echo `date`; echo "$lib"\n);
 			$qa_cmd .= qq(echo `date`; echo "$lib"\n);
-			$qa_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			$qa_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+			$qa_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 			$qa_cmd .= "cd $lib\n";
 			$qa_cmd .= "mkdir QA\n" if ($para !~ /\-d/);
 			$qa_cmd_multi .= "cd $lib && ";
@@ -753,7 +891,7 @@ sub runQA($) {
 						if (($reads !~ /fastq$/i && $reads !~ /fq$/i) || ($reads =~ /gz$/)) {
 							my $fq=(split /\//,$reads)[-1];
 							$fq=$1 if ($fq=~/(\S+)\.gz/);
-							if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/QA/$fq))
+							if (!-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/QA/$fq))
 							{
 								$qa_cmd .= "gzip -cd $reads > $fq\n";
 								$qa_cmd_multi .= "gzip -cd $fq && ";
@@ -775,14 +913,14 @@ sub runQA($) {
 			$qa_cmd_multi .= "cd .. && ";
 			$qa_cmd_multi .= "cd .. ";
 			$multi++;
-			if ($multi % $self->{"CustomSetting:multithreads"}!=0){
+			if ($multi % $self->{"setting:multithreads"}!=0){
 				$qa_cmd_multi .= "&\n";
 			}else{
 				$qa_cmd_multi .= "\n";
 			}
 		}
 		$qa_cmd .= "cd ..\n";
-		if (exists $self->{"CustomSetting:multimode"} && $self->{"CustomSetting:multimode"} =~ /y/i) {
+		if (exists $self->{"setting:multimode"} && $self->{"setting:multimode"} =~ /y/i) {
 			chomp $qa_cmd_multi;
 			$qa_cmd_multi=~s/\s\&+$//;
 			$qa_cmd_multi.="\n";
@@ -798,16 +936,16 @@ sub runFltDup ($) {
 	if (!exists $self->{"software:filterPCRdup"} || !defined $self->{"software:filterPCRdup"}){
 		return "";
 	}
-	my $filterPCRdup=checkPath($self->{"software:filterPCRdup"});
-	my $para=(exists $self->{"CustomSetting:filterPCRdup"})? $self->{"CustomSetting:filterPCRdup"} : "";
+	my $filterPCRdup=GATE::Error::checkPath($self->{"software:filterPCRdup"});
+	my $para=(exists $self->{"setting:filterPCRdup"})? $self->{"setting:filterPCRdup"} : "";
 	my $fltpcr_cmd = qq(echo `date`; echo "run filterPCRdup"\n);
 	$fltpcr_cmd .= qq(cd $self->{"-workdir"}\n);
-	$fltpcr_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$fltpcr_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$fltpcr_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$fltpcr_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib (@libraries) {
 		$fltpcr_cmd .= qq(echo `date`; echo "$lib"\n);
-		$fltpcr_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$fltpcr_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$fltpcr_cmd .= "cd $lib\n";
 		my %fq=getlibSeq($self->{"LIB"}{$lib});
 		my @Reads1=();
@@ -828,7 +966,7 @@ sub runFltDup ($) {
 			my $fq1=$reads1;
 			if (($reads1 !~ /fastq$/i && $reads1 !~ /fq$/i) || ($reads1 =~ /gz$/)) {
 				$fq1=$1 if ($fqname1=~/(\S+)\.gz/);
-				if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$fq1))
+				if (!-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$fq1))
 				{
 					$fltpcr_cmd .= "gzip -cd $reads1 > $fq1\n" if ($reads1=~/gz$/);
 				}
@@ -837,7 +975,7 @@ sub runFltDup ($) {
 			my $fq2=$reads2 if (defined $reads2);
 			if ( (defined $reads2) && ( ($reads2 !~ /fastq$/i && $reads2 !~ /fq$/i) || ($reads2 =~ /gz$/) ) ) {
 				$fq2=$1 if ($fqname2=~/(\S+)\.gz/);
-				if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$fq2))
+				if (!-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$fq2))
 				{
 					$fltpcr_cmd .= "gzip -cd $reads2 > $fq2\n" if ($reads2=~/gz$/);
 				}
@@ -874,12 +1012,12 @@ sub runFltDup ($) {
 			$fltpcr_cmd .= " $prefix $para\n";
 			if (@Reads1>0 && @Reads2>0) 
 			{
-				${$self->{"LIB"}{$lib}{'fq1'}}[$j]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
-				${$self->{"LIB"}{$lib}{'fq2'}}[$j]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out2);
+				${$self->{"LIB"}{$lib}{'fq1'}}[$j]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1);
+				${$self->{"LIB"}{$lib}{'fq2'}}[$j]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out2);
 			}
 			elsif (@Reads1>0)
 			{
-				${$self->{"LIB"}{$lib}{'fq1'}}[$j]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out1);
+				${$self->{"LIB"}{$lib}{'fq1'}}[$j]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out1);
 			}
 		}
 		for (my $j=0;$j<@Reads3;$j++) {
@@ -888,7 +1026,7 @@ sub runFltDup ($) {
 			my $fq3=$reads3;
 			if (($reads3 !~ /fastq$/i && $reads3 !~ /fq$/i) || ($reads3 =~ /gz$/)) {
 				$fq3=$1 if ($fqname3=~/(\S+)\.gz/);
-				if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$fq3))
+				if (!-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$fq3))
 				{
 					$fltpcr_cmd .= "gzip -cd $reads3 > $fq3\n" if ($reads3=~/gz$/);
 				}
@@ -911,7 +1049,7 @@ sub runFltDup ($) {
 				}
 			}
 			$fltpcr_cmd .= "$filterPCRdup -fastq1=$fq3 $prefix $para\n";
-			${$self->{"LIB"}{$lib}{'fq'}}[$j]=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$out3);
+			${$self->{"LIB"}{$lib}{'fq'}}[$j]=qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$out3);
 		}
 		$fltpcr_cmd .= "cd ..\n";
 	}
@@ -924,26 +1062,26 @@ sub runFltAP ($) {
 	if (!exists $self->{"software:scanAP"} || !defined $self->{"software:scanAP"}){
 		return "";
 	}
-	my $scanAP=checkPath($self->{"software:scanAP"});
+	my $scanAP=GATE::Error::checkPath($self->{"software:scanAP"});
 	my $fastqcut=$self->{"software:fastqcut"} if (exists $self->{"software:fastqcut"});
-	my $fastqcut_para = $self->{"CustomSetting:fastqcut"} if (exists $self->{"CustomSetting:fastqcut"});
-	my $align_matrix=$self->{"CustomSetting:align.mat"} if (exists $self->{"CustomSetting:align.mat"});
-	my $para=(exists $self->{"CustomSetting:scanAP"})? $self->{"CustomSetting:scanAP"} : "";
-	my $AP=checkPath($self->{"database:AP"});
-	my $trim_seq=checkPath($self->{"software:trim_seq"}) if (exists $self->{"software:trim_seq"});
-	my $trim_seq_para=$self->{"CustomSetting:trim_seq"};
-	my $multirun=checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
-	my $multirun_sh=qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/runFltAP.$$.sh);
+	my $fastqcut_para = $self->{"setting:fastqcut"} if (exists $self->{"setting:fastqcut"});
+	my $align_matrix=$self->{"setting:align.mat"} if (exists $self->{"setting:align.mat"});
+	my $para=(exists $self->{"setting:scanAP"})? $self->{"setting:scanAP"} : "";
+	my $AP=GATE::Error::checkPath($self->{"database:AP"});
+	my $trim_seq=GATE::Error::checkPath($self->{"software:trim_seq"}) if (exists $self->{"software:trim_seq"});
+	my $trim_seq_para=$self->{"setting:trim_seq"};
+	my $multirun=GATE::Error::checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+	my $multirun_sh=(-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"})) ? qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/runFltAP.$$.sh) : qq($self->{"-workdir"}/runFltAP.$$.sh);
 	my $fltap_cmd = qq(echo `date`; echo "run scanAP"\n);
 	if (defined $multirun) {
 		open (FLA,">$multirun_sh");
 		$fltap_cmd .= qq(export multirun="$multirun"\n);
 	}
 	$fltap_cmd .=qq(cd $self->{"-workdir"}\n);
-	$fltap_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$fltap_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$fltap_cmd .= qq(export AP=$AP\n);
-	$fltap_cmd .= qq(mkdir $self->{"CustomSetting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$fltap_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$fltap_cmd .= qq(mkdir $self->{"setting:qc_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$fltap_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my $fltap_cmd_multi_head=$fltap_cmd;
 	my $fltap_cmd_multi="";
 	my $multi=0;
@@ -952,15 +1090,15 @@ sub runFltAP ($) {
 		$fltap_cmd_multi .= $fltap_cmd_multi_head;
 		$fltap_cmd_multi .= qq(echo `date` && echo "$lib"\n);
 		$fltap_cmd .= qq(echo `date` && echo "$lib"\n);
-		$fltap_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
-		$fltap_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$fltap_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+		$fltap_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$fltap_cmd .= "cd $lib\n";
 		$fltap_cmd_multi .= "cd $lib && ";
-		$fltap_cmd .= qq(cp $align_matrix ./\n) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
-		$fltap_cmd_multi .=  qq(cp $align_matrix ./ && ) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/align.mat));
+		$fltap_cmd .= qq(cp $align_matrix ./\n) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/align.mat));
+		$fltap_cmd_multi .=  qq(cp $align_matrix ./ && ) unless (!defined $align_matrix || -f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/align.mat));
 		if (defined $multirun) {
 			print FLA qq(echo `date` && echo "$lib" && ); 
-			print FLA qq([[ -d $lib ]] || mkdir $lib && )unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+			print FLA qq([[ -d $lib ]] || mkdir $lib && )unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 			print FLA qq(cd $lib && );
 		}
 		my %Reads;
@@ -972,7 +1110,7 @@ sub runFltAP ($) {
 				if (($reads !~ /fastq$/i && $reads !~ /fq$/i) || ($reads =~ /gz$/)) {
 					$fq=$1 if ($fqname=~/(\S+)\.gz/);
 					$fqname = $fq;
-					if (!-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$fq))
+					if (!-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$fq))
 					{
 						$fltap_cmd .= "gzip -cd $reads > $fq\n" if ($reads=~/gz$/);
 						if ($reads=~/gz$/){
@@ -989,7 +1127,7 @@ sub runFltAP ($) {
 					$stat="$1.stat";
 					$detail="$1.detail";
 				}
-				if ( ( (!exists $self->{"CustomSetting:reuse"}) || (exists $self->{"CustomSetting:reuse"} && $self->{"CustomSetting:reuse"} =~/N/i) ) && !-f qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib/$detail))
+				if ( ( (!exists $self->{"setting:reuse"}) || (exists $self->{"setting:reuse"} && $self->{"setting:reuse"} =~/N/i) ) && !-f qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib/$detail))
 				{
 					$fltap_cmd .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para\n";
 					$fltap_cmd_multi .= "$scanAP -i $fq -a \$AP -s $stat -d $detail $para && ";
@@ -1040,7 +1178,7 @@ sub runFltAP ($) {
 				my ($reads2,$filter2)=@{${$Reads{"$lb$j"}}[$m]} if (defined $i && defined $j && exists $self->{"LIB"}{$lib}{"$lb$j"});
 				if (defined $reads1 && defined $reads2) {
 					if (exists $self->{"software:fltfastq2pe"}){
-						my $fltfastq2pe=checkPath($self->{"software:fltfastq2pe"});
+						my $fltfastq2pe=GATE::Error::checkPath($self->{"software:fltfastq2pe"});
 						my ($pair1,$pair2)=($reads1,$reads2);
 						$pair1=~s/fastq$/pair.fastq/i;
 						$pair2=~s/fastq$/pair.fastq/i;
@@ -1048,34 +1186,34 @@ sub runFltAP ($) {
 						$single1=~s/fastq$/single.fastq/i;
 						$single2=~s/fastq$/single.fastq/i;
 						$fltap_cmd .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2\n";
-						$fltap_cmd .= "rm $reads1 $reads2\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+						$fltap_cmd .= "rm $reads1 $reads2\n" if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 						$fltap_cmd_multi .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
-						$fltap_cmd_multi .= "rm $reads1 $reads2 && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+						$fltap_cmd_multi .= "rm $reads1 $reads2 && " if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 						if (defined $multirun) {
 							print FLA "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
-							print FLA "rm $reads1 $reads2 && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+							print FLA "rm $reads1 $reads2 && " if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 						}
-						${$self->{"LIB"}{$lib}{"$lb$i"}}[$p]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$pair1";
-						${$self->{"LIB"}{$lib}{"$lb$j"}}[$p]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$pair2";
-						push @{$self->{"LIB"}{$lib}{"fq"}},$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$single1";
+						${$self->{"LIB"}{$lib}{"$lb$i"}}[$p]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$pair1";
+						${$self->{"LIB"}{$lib}{"$lb$j"}}[$p]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$pair2";
+						push @{$self->{"LIB"}{$lib}{"fq"}},$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$single1";
 						foreach my $k(keys %{$self->{$lib}{"$lb$i"}{$p}})
 						{
 							$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{"fq"}}-1}{$k}=$self->{$lib}{"$lb$i"}{$p}{$k};
 						}
-						push @{$self->{"LIB"}{$lib}{"fq"}},$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$single2";
+						push @{$self->{"LIB"}{$lib}{"fq"}},$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$single2";
 						foreach my $k(keys %{$self->{$lib}{"$lb$i"}{$p}})
 						{
 							$self->{$lib}{'fq'}{@{$self->{"LIB"}{$lib}{"fq"}}-1}{$k}=$self->{$lib}{"$lb$i"}{$p}{$k};
 						}
 						$p++;
 					} else {
-						${$self->{"LIB"}{$lib}{"$lb$i"}}[$s1]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$reads1";
+						${$self->{"LIB"}{$lib}{"$lb$i"}}[$s1]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$reads1";
 						$s1++;
-						${$self->{"LIB"}{$lib}{"$lb$j"}}[$s2]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$reads2";
+						${$self->{"LIB"}{$lib}{"$lb$j"}}[$s2]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$reads2";
 						$s2++;
 					}
 				} elsif (defined $reads1 && $reads1 ne "") {
-					${$self->{"LIB"}{$lib}{$lbmark}}[$s1]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$reads1";
+					${$self->{"LIB"}{$lib}{$lbmark}}[$s1]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$reads1";
 					foreach my $k(keys %{$self->{$lib}{$lbmark}{$p}})
 					{
 						if (exists $self->{$lib}{$lbmark}{$s1}{$k})
@@ -1093,7 +1231,7 @@ sub runFltAP ($) {
 					}
 					$s1++;
 				} elsif (defined $reads2 && $reads2 ne "") {
-					${$self->{"LIB"}{$lib}{$lbmark}}[$s2]=$self->{"-workdir"}."/".$self->{"CustomSetting:qc_outdir"}."/$lib/$reads2";
+					${$self->{"LIB"}{$lib}{$lbmark}}[$s2]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$reads2";
 					foreach my $k(keys %{$self->{$lib}{$lbmark}{$p}})
 					{
 						if (exists $self->{$lib}{$lbmark}{$s2}{$k})
@@ -1113,10 +1251,10 @@ sub runFltAP ($) {
 				}
 			}
 		}
-		$fltap_cmd .= "rm *.out\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
-		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+		$fltap_cmd .= "rm *.out\n" if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
+		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 		if (defined $multirun) {
-			print FLA "rm *.out && " if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+			print FLA "rm *.out && " if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 			print FLA "cd ..\n";
 		}
 		$fltap_cmd .= qq(rm align.mat\n) unless (!defined $align_matrix || -f "align.mat");
@@ -1125,7 +1263,7 @@ sub runFltAP ($) {
 		$multi++;
 		$fltap_cmd_multi =~ s/\s+$//;
 		$fltap_cmd_multi =~ s/\&\&$//;
-		if ($multi % $self->{"CustomSetting:multithreads"}!=0){
+		if ($multi % $self->{"setting:multithreads"}!=0){
 			$fltap_cmd_multi .= "&\n";
 		} else {
 			$fltap_cmd_multi .= "\n";
@@ -1134,14 +1272,14 @@ sub runFltAP ($) {
 	}
 	
 	$fltap_cmd .= "cd ..\n";
-	if (exists $self->{"CustomSetting:multimode"}) {
+	if (exists $self->{"setting:multimode"}) {
 		chomp $fltap_cmd_multi;
 		$fltap_cmd_multi=~s/\s\&+$//;
 		$fltap_cmd_multi.="\n";
 		$fltap_cmd_multi.= print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
 		if (defined $multirun) {
 			my $multirun_cmd = $fltap_cmd_multi_head;
-			$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"CustomSetting:multithreads"}\n);
+			$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"setting:multithreads"}\n);
 			$multirun_cmd .= print_check_process('scanAP','trim_seq','fastqcut','fltfastq2pe');
 			return $multirun_cmd;
 		} else {
@@ -1154,29 +1292,29 @@ sub runFltAP ($) {
 
 sub runRSeQC ($) {
 	my $self = shift;
-	if (!exists $self->{"CustomSetting:RSeQCPATH"} || !defined $self->{"CustomSetting:RSeQCPATH"}){
+	if (!exists $self->{"setting:RSeQCPATH"} || !defined $self->{"setting:RSeQCPATH"}){
 		return "";
 	}
-	my $rseqc_path = $self->{"CustomSetting:RSeQCPATH"};
+	my $rseqc_path = $self->{"setting:RSeQCPATH"};
 	my $refseqbed = $self->{"database:refseq-bed"};
 	
 	my $rseqc_cmd = qq(echo `date`; echo "run RSeQC"\n);
 	$rseqc_cmd .= qq(cd $self->{"-workdir"}\n);
-	$rseqc_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$rseqc_cmd .= qq(export PYTHONPATH=$self->{"CustomSetting:PYTHONPATH"}:\$PYTHONPATH\n) if (exists $self->{"CustomSetting:PYTHONPATH"});
+	$rseqc_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$rseqc_cmd .= qq(export PYTHONPATH=$self->{"setting:PYTHONPATH"}:\$PYTHONPATH\n) if (exists $self->{"setting:PYTHONPATH"});
 	$rseqc_cmd .= qq(export PATH=$rseqc_path:\$PATH\n);
 	unless (exists $self->{'cmd'}{'aln'} && $self->{'cmd'}{'aln'}==0) {
 		$rseqc_cmd .= $self->runBWA("ref");
 		$self->{'cmd'}{'aln'} = 0;
 	}
 	$self->{'cmd'}{'aln'}=0;
-	$rseqc_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
-	$rseqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$rseqc_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$rseqc_cmd .= qq(export qc_outdir=$self->{"setting:qc_outdir"}\n);
+	$rseqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$rseqc_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib (@libraries) {
 		$rseqc_cmd .= qq(echo `date`; echo "$lib"\n);
-		$rseqc_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$rseqc_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$rseqc_cmd .= "cd $lib\n";
 		if (exists $self->{$lib}{"ref-bwabam"}) {
 			foreach my $bam (@{$self->{$lib}{"ref-bwabam"}}) {
@@ -1252,24 +1390,24 @@ sub runRNASeqQC ($) {
 		return "";
 	}
 	my $RNASeQC = $self->{"software:RNA-SeQC"};
-	my $reference=checkPath($self->{"database:ref"});
-	my $genecode=checkPath($self->{"database:gencode-gtf"});
-	my $gcfile=checkPath($self->{"database:gencode-gc"});
-	my $para=$self->{'CustomSetting:RNA-SeQC'};
+	my $reference=GATE::Error::checkPath($self->{"database:ref"});
+	my $genecode=GATE::Error::checkPath($self->{"database:gencode-gtf"});
+	my $gcfile=GATE::Error::checkPath($self->{"database:gencode-gc"});
+	my $para=$self->{'setting:RNA-SeQC'};
 	
 	my $rnaseqqc_cmd = qq(echo `date`; echo "run RNA-SeQC"\n);
-	$rnaseqqc_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$rnaseqqc_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
+	$rnaseqqc_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$rnaseqqc_cmd .= qq(export qc_outdir=$self->{"setting:qc_outdir"}\n);
 	$rnaseqqc_cmd .= qq(cd $self->{"-workdir"}\n);
-	$rnaseqqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
+	$rnaseqqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
 	unless (exists $self->{'cmd'}{'aln'} && $self->{'cmd'}{'aln'}==0) {
 		$rnaseqqc_cmd .= $self->runBWA("ref");
 		$self->{'cmd'}{'aln'}=0;
 	}
-	$rnaseqqc_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$rnaseqqc_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
-		$rnaseqqc_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$rnaseqqc_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$rnaseqqc_cmd .= "cd $lib\n";
 		my $refbam=(@{$self->{$lib}{"ref-bwabam"}}>0)?join ",",@{$self->{$lib}{"ref-bwabam"}}:${$self->{$lib}{"ref-bwabam"}}[0];
 		if (exists $self->{"database:rRNA"}) {
@@ -1312,19 +1450,19 @@ sub runSEECER($) {
 	}
 	my $seecer = $self->{"software:SEECER"};
 	my $jellyfish = $self->{"software:JELLYFISH"};
-	my $seecerpara = $self->{"CustomSetting:SEECER"};
+	my $seecerpara = $self->{"setting:SEECER"};
 	my $seecer_cmd = qq(echo `date`; echo "run SEECER"\n);;
-	$seecer_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$seecer_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$seecer_cmd .= qq(export seecer=$seecer\n);
 	$seecer_cmd .= qq(export jellyfish=$jellyfish\n);
 	$seecer_cmd .= qq(export seecerpara="$seecerpara"\n);
-	$seecer_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
+	$seecer_cmd .= qq(export qc_outdir=$self->{"setting:qc_outdir"}\n);
 	$seecer_cmd .= qq(cd $self->{"-workdir"}\n);
-	$seecer_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$seecer_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$seecer_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$seecer_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
-		$seecer_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$seecer_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$seecer_cmd .= "cd $lib\n";
 		my %fq=getlibSeq($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
@@ -1355,6 +1493,8 @@ sub runBEDtools ($) {
 #                                                       #
 #########################################################
 
+## MAQ v0.7.1
+sub runMAQ ($$) {
 #maq fasta2bfa in.ref.fasta out.ref.bfa
 #maq sol2sanger in.solexa.fastq out.sanger.fastq
 #maq fastq2bfq in.read.fastq out.read.bfq
@@ -1366,41 +1506,39 @@ sub runBEDtools ($) {
 #maq cns2snp in.cns > out.snp
 #maq.pl SNPfilter [-d minDep] [-D maxDep] [-Q maxMapQ] [-q minCnsQ] [-w indelWinSize] [-n minNeiQ] [-F in.indelpe] [-f in.indelsoa] [-s minScore] [-m maxAcross] [-a] [-N maxWinSNP] [-W densWinSize] in.cns2snp.snp > out.filtered.snp 
 
-#lastest version: v0.7.1
-sub runMAQ ($$) {
 	my $self=shift;
 	my $ref=shift;
 	if (!exists $self->{"software:maq"} || !defined $self->{"software:maq"} || !-e $self->{"software:maq"}){
 		return "";
 	}
 	my $maq_cmd = qq(echo `date`; echo "run MAQ"\n);
-	$maq_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $maq =checkPath($self->{"software:maq"});
+	$maq_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $maq =GATE::Error::checkPath($self->{"software:maq"});
 	$maq_cmd .= qq(export maq="$maq"\n);
-	my $maqpl=checkPath($self->{"software:maq.pl"});
+	my $maqpl=GATE::Error::checkPath($self->{"software:maq.pl"});
 	$maq_cmd .= qq(export maqpl="$maqpl"\n);
-	my $samtools=checkPath($self->{"software:samtools"});
+	my $samtools=GATE::Error::checkPath($self->{"software:samtools"});
 	my $samtools_path=$1 if ($samtools =~ /(\S+)\/samtools/);
 	my $maq2sam;
-	$maq2sam=checkPath("$samtools_path/misc/maq2sam-short") if (-f "$samtools_path/misc/maq2sam-short" && -e "$samtools_path/misc/maq2sam-short");
-	$maq2sam=checkPath($self->{"software:maq2sam"}) if (exists $self->{"software:maq2sam"});
+	$maq2sam=GATE::Error::checkPath("$samtools_path/misc/maq2sam-short") if (-f "$samtools_path/misc/maq2sam-short" && -e "$samtools_path/misc/maq2sam-short");
+	$maq2sam=GATE::Error::checkPath($self->{"software:maq2sam"}) if (exists $self->{"software:maq2sam"});
 	$maq_cmd .= qq(export samtools="$samtools"\n);
 	$maq_cmd .= qq(export maq2sam="$maq2sam"\n) if (defined $maq2sam);
-	my $reference=checkPath($self->{"database:$ref"});
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	
 	my $mappara="";
-	$mappara=$self->{'CustomSetting:maqmap'} if (exists $self->{'CustomSetting:maqmap'});
+	$mappara=$self->{'setting:maqmap'} if (exists $self->{'setting:maqmap'});
 	$maq_cmd .= qq(export mappara="$mappara"\n) if (defined $mappara);
 	my $assemblepara="";
-	$assemblepara=$self->{'CustomSetting:maq_assemble'} if (exists $self->{'CustomSetting:maq_assemble'});
+	$assemblepara=$self->{'setting:maq_assemble'} if (exists $self->{'setting:maq_assemble'});
 	$maq_cmd .= qq(export assemblepara="$assemblepara"\n) if (defined $assemblepara);
 
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$maq_cmd .= qq(export workdir="$workdir"\n);
-	my $alndir= checkPath($self->{"CustomSetting:aln_outdir"});
+	my $alndir= GATE::Error::checkPath($self->{"setting:aln_outdir"});
 	$maq_cmd .= qq(export alndir="$alndir"\n);
 	my $bfa   = "$1.bfa" if ($reference=~/(\S+).fa/);
-	$maq_cmd .= "\${maq} fasta2bfa \$REFERENCE \n" unless (checkIndex('maq',$reference)==1);
+	$maq_cmd .= "\${maq} fasta2bfa \$REFERENCE \n" unless (GATE::Error::checkIndex('maq',$reference)==1);
 	$maq_cmd .= qq(export REFBFA="$bfa"\n);
 	$maq_cmd .= qq(cd \${workdir}\n);
 	$maq_cmd .= qq(cd \${alndir});
@@ -1409,7 +1547,7 @@ sub runMAQ ($$) {
 	my $multi=0;
 	foreach my $lib(@libraries) {
 		$maq_cmd .= qq(echo `date`; echo "$lib"\n);
-		$maq_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) if (!-e qq($self->{"-workdir"}/$self->{"CustomSetting:aln_outdir"}/$lib));
+		$maq_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) if (!-e qq($self->{"-workdir"}/$self->{"setting:aln_outdir"}/$lib));
 		$maq_cmd .= "cd $lib\n";
 		my %fq=getlibSeq($self->{"LIB"}{$lib});
 		my @map;
@@ -1438,9 +1576,9 @@ sub runMAQ ($$) {
 					my $fq2=${$fq{2}}[$j];
 					my $bfq1="$1.bfq" if ($fq1=~/(\S+).fastq/ || $fq1=~/(\S+)\.fq/);
 					my $bfq2="$1.bfq" if ($fq2=~/(\S+).fastq/ || $fq2=~/(\S+)\.fq/);
-					$maq_cmd.=qq(\${maq} fastq2bfq $fq1 $bfq1) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq1 $bfq1) unless (GATE::Error::checkIndex('maq',$fq1)==1);
 					$maq_cmd.=qq( &\n);
-					$maq_cmd.=qq(\${maq} fastq2bfq $fq2 $bfq2\n) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq2 $bfq2\n) unless (GATE::Error::checkIndex('maq',$fq1)==1);
 					$maq_cmd.=print_check_process('fastq2bfq',"$bfq1","$bfq2");
 					if ($PI>600) {
 						$maq_cmd.=qq(\${maq} map -A $PI $mappara $lib.pair.$k.aln.map \$REFBFA $bfq1 $bfq2 && );
@@ -1449,7 +1587,7 @@ sub runMAQ ($$) {
 					}
 					#$maq_cmd.=qq(\${maq2sam} $lib.$k.aln.map $lib.$k.aln.sam $rg && ) if (defined $maq2sam);
 					#$maq_cmd.=qq(\${maq} assemble \${assemblepara} $lib.$k.cns \$REFBFA $lib.$k.aln.map && );
-					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$maq_cmd.=($multi % $self->{"setting:multithreads"} != 0) ? " &\n" : "\n";
 					$multi++;
 					push @map, "$lib.pair.$k.aln.map";
 					
@@ -1474,9 +1612,9 @@ sub runMAQ ($$) {
 					my $fq2=${$fq{2}}[$j];
 					my $bfq1="$1.bfq" if ($fq1=~/(\S+).fastq/ || $fq1=~/(\S+)\.fq/);
 					my $bfq2="$1.bfq" if ($fq2=~/(\S+).fastq/ || $fq2=~/(\S+)\.fq/);
-					$maq_cmd.=qq(\${maq} fastq2bfq $fq1 $bfq1) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq1 $bfq1) unless (GATE::Error::checkIndex('maq',$fq1)==1);
 					$maq_cmd.=qq( &\n);
-					$maq_cmd.=qq(\${maq} fastq2bfq $fq2 $bfq2\n) unless (checkIndex('maq',$fq1)==1);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq2 $bfq2\n) unless (GATE::Error::checkIndex('maq',$fq1)==1);
 					$maq_cmd.=print_check_process('fastq2bfq',"$bfq1","$bfq2");
 					if ($PI>600) {
 						$maq_cmd.=qq(\${maq} map -A $PI $mappara $lib.pair.aln.map \$REFBFA $bfq1 $bfq2 && );
@@ -1485,7 +1623,7 @@ sub runMAQ ($$) {
 					}
 					#$maq_cmd.=qq(\${maq2sam} $lib.aln.map $lib.aln.sam $rg && ) if (defined $maq2sam);
 					#$maq_cmd.=qq(\${maq} assemble \${assemblepara} $lib.cns \$REFBFA $lib.aln.map && );
-					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$maq_cmd.=($multi % $self->{"setting:multithreads"} != 0) ? " &\n" : "\n";
 					$multi++;
 					push @map, "$lib.pair.aln.map";
 				}
@@ -1513,10 +1651,10 @@ sub runMAQ ($$) {
 					$rg.="\\n";
 					my $fq=${$fq{0}}[$j];
 					my $bfq="$1.bfq" if ($fq=~/(\S+).fastq/ || $fq=~/(\S+)\.fq/);
-					$maq_cmd.=qq(\${maq} fastq2bfq $fq $bfq) unless (checkIndex('maq',$fq)==1);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq $bfq) unless (GATE::Error::checkIndex('maq',$fq)==1);
 					$maq_cmd.=print_check_process('fastq2bfq','$bfq');
 					$maq_cmd.=qq(\${maq} map $mappara $lib.single.$k.aln.map \$REFBFA $bfq && );
-					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$maq_cmd.=($multi % $self->{"setting:multithreads"} != 0) ? " &\n" : "\n";
 					$multi++;
 					push @map, "$lib.single.$k.aln.map";
 					
@@ -1547,10 +1685,10 @@ sub runMAQ ($$) {
 					$rg.="\\n";
 					my $fq=${$fq{0}}[$j];
 					my $bfq="$1.bfq" if ($fq=~/(\S+).fastq/ || $fq=~/(\S+)\.fq/);
-					$maq_cmd.=qq(\${maq} fastq2bfq $fq $bfq) unless (checkIndex('maq',$fq)==1);
+					$maq_cmd.=qq(\${maq} fastq2bfq $fq $bfq) unless (GATE::Error::checkIndex('maq',$fq)==1);
 					$maq_cmd.=print_check_process('fastq2bfq','$bfq');
 					$maq_cmd.=qq(\${maq} map $mappara $lib.single.aln.map \$REFBFA $bfq && );
-					$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+					$maq_cmd.=($multi % $self->{"setting:multithreads"} != 0) ? " &\n" : "\n";
 					$multi++;
 					push @map, "$lib.single.aln.map";
 				}
@@ -1571,7 +1709,7 @@ sub runMAQ ($$) {
 			$maq_cmd.=qq(\${maq} indelpe \$REFBFA $libmap > out.indelpe && );
 			$maq_cmd.=qq(\${maqpl} SNPfilter $lib.snp > $lib.filtered.snp && );
 			$maq_cmd.=qq(\${maq2sam} $libmap $rg) if (defined $maq2sam); 
-			$maq_cmd.=($multi % $self->{"CustomSetting:multithreads"} != 0) ? " &\n" : "\n";
+			$maq_cmd.=($multi % $self->{"setting:multithreads"} != 0) ? " &\n" : "\n";
 			$multi++;
 			push @{$self->{$lib}{"$ref-maqmap"}},$libmap;
 		}
@@ -1581,7 +1719,8 @@ sub runMAQ ($$) {
 	return $maq_cmd;
 }
 
-#latest version: 0.7.4-r385
+## BWA 0.7.4-r385
+## SAMtools 0.1.19-44428cd
 sub runBWA($$) {
 	my $self=shift;
 	my $ref=shift;
@@ -1590,50 +1729,50 @@ sub runBWA($$) {
 	}
 	$ref ||= 'ref';
 	my $bwa_cmd = qq(echo `date`; echo "run BWA"\n);
-	$bwa_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $bwa=checkPath($self->{"software:bwa"});
+	$bwa_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $bwa=GATE::Error::checkPath($self->{"software:bwa"});
 	$bwa_cmd .= qq(export bwa="$bwa"\n);
-	my $samtools=checkPath($self->{"software:samtools"});
+	my $samtools=GATE::Error::checkPath($self->{"software:samtools"});
 	$bwa_cmd .= qq(export samtools="$samtools"\n);
-	my $reference=checkPath($self->{"database:$ref"});
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	$bwa_cmd .= qq(export REFERENCE="$reference"\n);
-	my $alnpara=$self->{'CustomSetting:bwaaln'} if (exists $self->{'CustomSetting:bwaaln'});
-	my $mempara=$self->{'CustomSetting:bwamem'} if (exists $self->{'CustomSetting:bwamem'});
-	if ($alnpara!~/\-t\s+\d+/ && exists $self->{'CustomSetting:multithreads'})
+	my $alnpara=$self->{'setting:bwaaln'} if (exists $self->{'setting:bwaaln'});
+	my $mempara=$self->{'setting:bwamem'} if (exists $self->{'setting:bwamem'});
+	if ($alnpara!~/\-t\s+\d+/ && exists $self->{'setting:multithreads'})
 	{
-		$alnpara.=" -t ".$self->{'CustomSetting:multithreads'};
+		$alnpara.=" -t ".$self->{'setting:multithreads'};
 	}
 	$bwa_cmd .= qq(export alnpara="$alnpara"\n) if (defined $alnpara);
 	$bwa_cmd .= qq(export mempara="$mempara"\n) if (defined $mempara);
 	my $sampepara="";
-	$sampepara=$self->{'CustomSetting:sampe'} if (exists $self->{'CustomSetting:sampe'});
+	$sampepara=$self->{'setting:sampe'} if (exists $self->{'setting:sampe'});
 	my $samsepara="";
-	$samsepara=$self->{'CustomSetting:samse'} if (exists $self->{'CustomSetting:samse'});
-	$bwa_cmd .= qq(export heap="$self->{'CustomSetting:heap'}"\n);
+	$samsepara=$self->{'setting:samse'} if (exists $self->{'setting:samse'});
+	$bwa_cmd .= qq(export heap="$self->{'setting:heap'}"\n);
 	my ($picard,$FixMateInformation)=("","");
 	if (exists $self->{"software:picard"})
 	{
-		$picard=checkPath($self->{"software:picard"});
+		$picard=GATE::Error::checkPath($self->{"software:picard"});
 		my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 		$bwa_cmd .= qq(export picard="$picard"\n);
 		$picard = correctJavaCmd($picard,"\${heap}");
 		$FixMateInformation=(exists $self->{"software:FixMateInformation"})?$self->{"software:FixMateInformation"}:qq($picardpath/FixMateInformation.jar);
 	}
 	
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$bwa_cmd .= qq(export workdir="$workdir"\n);
-	my $alndir=checkPath($self->{"CustomSetting:aln_outdir"});
+	my $alndir=GATE::Error::checkPath($self->{"setting:aln_outdir"});
 	$bwa_cmd .= qq(export alndir="$alndir"\n);
 	$bwa_cmd .= qq(cd \${workdir}\n);
 	$bwa_cmd .= qq([[ -d \${alndir} ]] || mkdir \${alndir}\n) if (!-d qq($self->{"-workdir"}/$alndir));;
 	$bwa_cmd .= qq(cd \${alndir}\n);
-	$bwa_cmd .= "\${bwa} index -a bwtsw \$REFERENCE\n" unless (checkIndex('bwa',$reference)==1);
+	$bwa_cmd .= "\${bwa} index -a bwtsw \$REFERENCE\n" unless (GATE::Error::checkIndex('bwa',$reference)==1);
 	my $db=$1 if ($reference =~ /([^\/\.]+)\.fa/);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $skip = 0;
 	foreach my $lib(@libraries) {
 		$bwa_cmd .= qq(echo `date`; echo "$lib"\n);
-		$bwa_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) if (!-e qq($self->{"-workdir"}/$self->{"CustomSetting:aln_outdir"}/$lib));
+		$bwa_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) if (!-e qq($self->{"-workdir"}/$self->{"setting:aln_outdir"}/$lib));
 		$bwa_cmd .= "cd $lib\n";
 		if (exists $self->{$lib}{"$ref-bwabam"}) {
 			$skip++;
@@ -1662,10 +1801,10 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.$k.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.rmdup.bam $lib.pair.$k.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.pair.$k.rmdup.sort.bam\n";
-						$bam="$lib.pair.$k.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.bam $lib.pair.$k.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.$k.sort.bam\n";
+						$bam="$lib.pair.$k.sort.bam";
 					} else {
 						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
 						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
@@ -1681,10 +1820,10 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.rmdup.bam $lib.pair.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.pair.rmdup.sort.bam\n";
-						$bam="$lib.pair.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.bam $lib.pair.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.sort.bam\n";
+						$bam="$lib.pair.sort.bam";
 					}
 				} elsif (defined $alnpara) {
 					my $sai1=(split /\//,${$fq{1}}[$j])[-1];
@@ -1716,10 +1855,10 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= qq(\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.$k.bam\n);
-						$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.rmdup.bam $lib.pair.$k.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.pair.$k.rmdup.sort.bam\n";
-						$bam="$lib.pair.$k.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.bam $lib.pair.$k.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.$k.sort.bam\n";
+						$bam="$lib.pair.$k.sort.bam";
 					} else {
 						my $ID=(exists $self->{$lib}{'fq1'}{$j}{'ID'})?$self->{$lib}{'fq1'}{$j}{'ID'}:$lib;
 						my $SM=(exists $self->{$lib}{'fq1'}{$j}{'SM'})?$self->{$lib}{'fq1'}{$j}{'SM'}:$lib;
@@ -1736,10 +1875,10 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.rmdup.bam $lib.pair.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.pair.rmdup.sort.bam\n";
-						$bam="$lib.pair.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.bam $lib.pair.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.pair.sort.bam\n";
+						$bam="$lib.pair.sort.bam";
 					}
 				}
 ## Fix mate
@@ -1755,7 +1894,7 @@ sub runBWA($$) {
 					#$bwa_cmd .= qq(mkdir -p ./tmp_fixmate\n);
 					#$bwa_cmd .= qq(export tmp_fixmate="./tmp_fixmate"\n);
 					$FixMateInformation=correctJavaCmd($FixMateInformation,"\${heap}","./tmp_fixmate");
-					my $FixMateInformationPara=(exists $self->{"CustomSetting:FixMateInformation"})? $self->{"CustomSetting:FixMateInformation"}:"SO=coordinate CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT";
+					my $FixMateInformationPara=(exists $self->{"setting:FixMateInformation"})? $self->{"setting:FixMateInformation"}:"SO=coordinate CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT";
 					my $fxmtbam=$bam;
 					$fxmtbam=~s/bam$/fxmat\.bam/;
 					$bwa_cmd .= qq($FixMateInformation INPUT\=$bam OUTPUT=$fxmtbam $FixMateInformationPara\n);
@@ -1767,7 +1906,7 @@ sub runBWA($$) {
 #  -insert \
 #  -in $PWDS/${subjectID}.fxmt.bam \
 #  > $PWDS/${subjectID}.fxmt.stats
-						my $bamtools=checkPath($self->{"software:bamtools"});
+						my $bamtools=GATE::Error::checkPath($self->{"software:bamtools"});
 						$bwa_cmd .= qq(export bamtools\="$bamtools"\n);
 						my $stats="$1.stats" if ($fxmtbam=~/(\S+)\.bam/);
 						$bwa_cmd .= qq(\${bamtools} stats -insert -in $fxmtbam > $stats\n);
@@ -1775,8 +1914,8 @@ sub runBWA($$) {
 					$bwa_cmd .= qq(rm -rf tmp_fixmate\n);
 					$bam=$fxmtbam;
 				}
-				push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$bam";
-				$bwa_cmd .= "rm *.sai *.pair.bam *.rmdup.bam\n" if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+				push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$bam";
+				$bwa_cmd .= "rm *.sai *.pair.bam\n" if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 			}
 		}
 		if (exists $fq{0} && @{$fq{0}}>0){
@@ -1799,10 +1938,10 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.single.$k.rmdup.sort.bam\n";
-						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.$k.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.$k.bam $lib.single.$k.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.$k.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.$k.sort.bam";
 					} else {
 						my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:$lib;
 						my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
@@ -1818,12 +1957,12 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.rmdup.bam $lib.single.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.single.rmdup.sort.bam\n";
-						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.bam $lib.single.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.sort.bam";
 					}
-					$bwa_cmd .= "rm *.single.bam *.single.?.bam *.rmdup.bam\n" if (exists $self->{"CustomSetting:Clean"});
+					$bwa_cmd .= "rm *.single.bam *.single.?.bam\n" if (exists $self->{"setting:Clean"});
 				}elsif (defined $alnpara) {
 					my $sai1=(split /\//,${$fq{0}}[$j])[-1];
 					$sai1=~s/\.gz//i;
@@ -1847,10 +1986,10 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -\@ 8 -m 3G  $lib.single.$k.rmdup.bam $lib.single.$k.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.single.$k.rmdup.sort.bam\n";
-						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.$k.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -\@ 8 -m 3G  $lib.single.$k.bam $lib.single.$k.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.$k.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.$k.sort.bam";
 					} else {
 						my $ID=(exists $self->{$lib}{'fq'}{$j}{'ID'})?$self->{$lib}{'fq'}{$j}{'ID'}:$lib;
 						my $SM=(exists $self->{$lib}{'fq'}{$j}{'SM'})?$self->{$lib}{'fq'}{$j}{'SM'}:$lib;
@@ -1866,39 +2005,39 @@ sub runBWA($$) {
 							}
 						}
 						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.bam\n";
-						$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.rmdup.bam $lib.single.rmdup.sort\n";
-						$bwa_cmd .= "\${samtools} index $lib.single.rmdup.sort.bam\n";
-						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.single.rmdup.sort.bam";
+						#$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
+						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.bam $lib.single.sort\n";
+						$bwa_cmd .= "\${samtools} index $lib.single.sort.bam\n";
+						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.sort.bam";
 					}
-					$bwa_cmd .= "rm *.sai *.single.bam *.single.?.bam *.rmdup.bam\n" if (exists $self->{"CustomSetting:Clean"});
+					$bwa_cmd .= "rm *.sai *.single.bam *.single.?.bam\n" if (exists $self->{"setting:Clean"});
 				}
 			}
 		}
-		if (exists $self->{'CustomSetting:bwamerge'} && exists $self->{"software:picard"}) {
+		if (exists $self->{'setting:bwamerge'} && exists $self->{"software:picard"}) {
 			my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 			$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
-			my $MergeSamFilesPara=$self->{"CustomSetting:MergeSamFiles"};
+			my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
 			my $merge_bam=join " INPUT=",@{$self->{$lib}{"ref-bwabam"}};
 			$bwa_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
 			$bwa_cmd .= "\${samtools} index $lib.merge.bam\n";
 			$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
 			$bwa_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-			$bwa_cmd .= "rm -rf ./tmp_merge $lib.merge.bam*\n" if (exists $self->{"CustomSetting:Clean"});
+			$bwa_cmd .= "rm -rf ./tmp_merge $lib.merge.bam*\n" if (exists $self->{"setting:Clean"});
 			@{$self->{$lib}{"$ref-bwabam"}}=();
-			my $bam=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.merge.rmdup.sort.bam";
+			my $bam=$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.merge.rmdup.sort.bam";
 			push @{$self->{$lib}{"$ref-bwabam"}},$bam;
 			if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 				$bwa_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
 			}
 		}
-		if (exists $self->{'CustomSetting:UnmappedRealign'})
+		if (exists $self->{'setting:UnmappedRealign'})
 		{
 			if (exists $self->{$lib}{"$ref-bwabam"} && exists $self->{$lib}{"software:sam2reads"} && exists $self->{$lib}{"software:fltfastq2pe"})
 			{
-				my $sam2reads=checkPath($self->{$lib}{"software:sam2reads"});
+				my $sam2reads=GATE::Error::checkPath($self->{$lib}{"software:sam2reads"});
 				$bwa_cmd .= qq(export sam2reads="$sam2reads"\n);
-				my $fltfastq2pe=checkPath($self->{$lib}{"software:fltfastq2pe"});
+				my $fltfastq2pe=GATE::Error::checkPath($self->{$lib}{"software:fltfastq2pe"});
 				$bwa_cmd .= qq(export fltfastq2pe="$fltfastq2pe"\n);
 				@{$self->{"LIB"}{$lib}{'fq1'}}=();
 				@{$self->{"LIB"}{$lib}{'fq2'}}=();
@@ -1910,21 +2049,21 @@ sub runBWA($$) {
 					{
 						$bwa_cmd .= qq(\${samtools} -f 4 $bwabam | \${sam2reads} -R1 $lib.$i-unmpped.R1.fastq -R2 $lib.$i-unmpped.R2.fastq -R3 $lib.$i-unmpped.R3.fastq -f fq\n);
 						$bwa_cmd .= qq(\${fltfastq2pe} -fastq1 $lib.$i-unmpped.R1.fastq -fastq2 $lib.$i-unmpped.R2.fastq\n);
-						push @{$self->{"LIB"}{$lib}{'fq1'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.$i-unmpped.R1.pair.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq2'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.$i-unmpped.R2.pair.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.$i-unmpped.R1.single.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.$i-unmpped.R2.single.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.$i-unmpped.R3.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq1'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.$i-unmpped.R1.pair.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq2'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.$i-unmpped.R2.pair.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.$i-unmpped.R1.single.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.$i-unmpped.R2.single.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.$i-unmpped.R3.fastq);
 					}
 					else
 					{
 						$bwa_cmd .= qq(\${samtools} -f 4 $bwabam | \${sam2reads} -R1 $lib.unmpped.R1.fastq -R2 $lib.unmpped.R2.fastq -R3 $lib.unmpped.R3.fastq -f fq\n);
 						$bwa_cmd .= qq(\${fltfastq2pe} -fastq1 $lib.unmpped.R1.fastq -fastq2 $lib.unmpped.R2.fastq\n);
-						push @{$self->{"LIB"}{$lib}{'fq1'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.unmpped.R1.pair.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq2'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.unmpped.R2.pair.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.unmpped.R1.single.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.unmpped.R2.single.fastq);
-						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.unmpped.R3.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq1'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.unmpped.R1.pair.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq2'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.unmpped.R2.pair.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.unmpped.R1.single.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.unmpped.R2.single.fastq);
+						push @{$self->{"LIB"}{$lib}{'fq'}},qq($self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.unmpped.R3.fastq);
 					}
 					$i++;
 				}
@@ -1940,8 +2079,6 @@ sub runBWA($$) {
 	}
 }
 
-
-
 sub runBowtie($$) {
 	my ($self,$ref) = @_;
 	if (!exists $self->{"software:bowtie"} || !-e $self->{"software:bowtie"} || !defined $self->{"software:bowtie"} || defined $self->{"software:tophat"}) {
@@ -1949,14 +2086,14 @@ sub runBowtie($$) {
 	}
 	$ref ||= 'ref';
 	my $bowtie_cmd = qq(echo `date`; echo "run TopHat"\n);
-	$bowtie_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $bowtie=checkPath($self->{'software:bowtie'});
+	$bowtie_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $bowtie=GATE::Error::checkPath($self->{'software:bowtie'});
 	$bowtie_cmd.="export bowtie=$bowtie\n";
-	my $samtools = checkPath($self->{"software:samtools"});
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
 	$bowtie_cmd .= qq(export samtools="$samtools"\n);
-	my $reference=checkPath($self->{"database:$ref"});
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	$bowtie_cmd.="export reference=$reference\n";
-	my $bowtiepara=$self->{'CustomSetting:bowtie'};
+	my $bowtiepara=$self->{'setting:bowtie'};
 	$bowtie_cmd.=qq(export bowtiepara="$bowtiepara"\n);
 	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
 	$bowtie_version=$1 if ($bowtiepara=~/(bowtie[2]?)/);
@@ -1968,9 +2105,9 @@ sub runBowtie($$) {
 	my $bowtie_build="$bowtie-build";
 	$bowtie_cmd.="export bowtie_build=$bowtie_build\n";
 	$bowtie_cmd .= qq(export REFERENCE=$reference\n);
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$bowtie_cmd.="export workdir=$workdir\n";
-	my $alndir=checkPath($self->{"CustomSetting:aln_outdir"});
+	my $alndir=GATE::Error::checkPath($self->{"setting:aln_outdir"});
 	$bowtie_cmd .= qq(export alndir="$alndir"\n);
 	$bowtie_cmd.=qq(cd \$workdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -2048,13 +2185,13 @@ sub runBowtie($$) {
 			if (exists $self->{"software:picard"}) {
 				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
-				my $MergeSamFilesPara=$self->{"CustomSetting:MergeSamFiles"};
+				my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
 				my $merge_bam=join " INPUT=",@bam;
 				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.bam\n";
 				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
+				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"setting:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
 				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$lib.merge.rmdup.sort.bam";
 			} else {
@@ -2068,7 +2205,7 @@ sub runBowtie($$) {
 				$bowtie_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam\n";
 				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort -@ 8 -m 1G - $lib.merge.rmdup.sort\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"CustomSetting:Clean"});
+				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"setting:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
 				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$lib.merge.rmdup.sort.bam";
 			}
@@ -2083,10 +2220,10 @@ sub runBowtie($$) {
 }
 
 ## SOAPaligner v2.21
+sub runSOAP ($$) {
 #<ExecutablePath>/2bwt-builder <FastaPath/YourFasta>
 #./soap –a <reads_a> -D <index.files> -o <output></output>
 #./soap –a <reads_a> -b <reads_b> -D <index.files> -o <PE_output> -2 <SE_output> -m <min_insert_size> -x <max_insert_size>
-sub runSOAP ($$) {
 	my $self=shift;
 	my $ref=shift;
 	if (!exists $self->{"software:soap"} || !-e $self->{"software:soap"} || !defined $self->{"software:soap"}) {
@@ -2094,33 +2231,33 @@ sub runSOAP ($$) {
 	}
 	$ref ||= 'ref';
 	my $soap_cmd = qq(echo `date`; echo "run SOAPaligner"\n);
-	$soap_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $soap = checkPath($self->{"software:soap"});
+	$soap_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $soap = GATE::Error::checkPath($self->{"software:soap"});
 	my $soap_path = $1 if (defined $soap && $soap=~/(\S+)\/soap/);
 	my $builder;
 	if (defined $self->{"software:2bwt-builder"}) {
-		$builder=checkPath($self->{"software:2bwt-builder"});
+		$builder=GATE::Error::checkPath($self->{"software:2bwt-builder"});
 	} else {
-		$builder=checkPath("$soap_path/2bwt-builder");
+		$builder=GATE::Error::checkPath("$soap_path/2bwt-builder");
 	}
 	$soap_cmd .= qq(export soap="$soap"\n);
 	$soap_cmd .= qq(export soapbuilder="$builder"\n);
-	my $reference=checkPath($self->{"database:$ref"});
-	$soap_cmd .= "\${soapbuilder} \$reference\n" unless (checkIndex('soap',$reference)==1);
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
+	$soap_cmd .= "\${soapbuilder} \$reference\n" unless (GATE::Error::checkIndex('soap',$reference)==1);
 	$soap_cmd .= "export REFERENCE=$reference\.index\.\n";
-	my $soappara=$self->{'CustomSetting:soap'};
+	my $soappara=$self->{'setting:soap'};
 	$soap_cmd .= qq(export soappara="$soappara"\n);
-	my $soap2sam = checkPath($self->{"software:soap2sam.pl"}) if (exists $self->{"software:soap2sam.pl"});
+	my $soap2sam = GATE::Error::checkPath($self->{"software:soap2sam.pl"}) if (exists $self->{"software:soap2sam.pl"});
 	$soap_cmd .= qq(export soap2sam="$soap2sam") if (defined $soap2sam);
-	my $samtools = checkPath($self->{"software:samtools"});
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
 	$soap_cmd .= qq(export samtools="$samtools"\n);
-	$soap_cmd .= "\${samtools} faidx \$reference\n" unless (checkIndex('samtools',$reference)==1);
+	$soap_cmd .= "\${samtools} faidx \$reference\n" unless (GATE::Error::checkIndex('samtools',$reference)==1);
 	$soap_cmd .= qq(perl -e 'open \(FAI,"$reference.fai"\);while\(<FAI>\){chomp;my \@t=split;print "\\\@SQ\\tSN:\$t[0]\\tLN:\$t[1]\\n"}close FAI;" > $reference.inh.sam) if (defined $samtools);
 	
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$soap_cmd.="export workdir=$workdir\n";
 	$soap_cmd.=qq(cd \$workdir\n);
-	my $soap_outdir = (exists $self->{"CustomSetting:soap_outdir"})? $self->{"CustomSetting:soap_outdir"} : (exists $self->{"CustomSetting:aln_outdir"}) ? $self->{"CustomSetting:aln_outdir"} : "soap";
+	my $soap_outdir = (exists $self->{"setting:soap_outdir"})? $self->{"setting:soap_outdir"} : (exists $self->{"setting:aln_outdir"}) ? $self->{"setting:aln_outdir"} : "soap";
 	$soap_cmd .= "[[ -d $soap_outdir ]] || mkdir $soap_outdir\n" if (!-d qq($self->{"-workdir"}/$soap_outdir));
 	$soap_cmd .= "cd $soap_outdir\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -2249,13 +2386,13 @@ sub runSOAP ($$) {
 					$MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 					$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
 					if (defined $MergeSamFiles && $MergeSamFiles ne "") {
-						my $MergeSamFilesPara=(exists $self->{"CustomSetting:MergeSamFiles"})?$self->{"CustomSetting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
+						my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 						$merge_bam=join " INPUT\=",@bam;
 						$soap_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam\n";
-						if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
+						if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) )
 						{
 							$soap_cmd .= qq(rm -rf ./tmp_merge);
-							$soap_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+							$soap_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 						}
 						$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$lib.merge.bam";
 					}
@@ -2292,18 +2429,18 @@ sub runTopHat($$) {
 	}
 	$ref ||= 'ref';
 	my $tophat_cmd = qq(echo `date`; echo "run TopHat"\n);
-	$tophat_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $tophat=checkPath($self->{'software:tophat'});
+	$tophat_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $tophat=GATE::Error::checkPath($self->{'software:tophat'});
 	$tophat_cmd.="export tophat=$tophat\n";
-	my $bowtie=checkPath($self->{'software:bowtie'});
+	my $bowtie=GATE::Error::checkPath($self->{'software:bowtie'});
 	$tophat_cmd.="export bowtie=$bowtie\n";
-	my $samtools = checkPath($self->{"software:samtools"});
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
 	$tophat_cmd .= qq(export samtools="$samtools"\n);
-	my $reference=checkPath($self->{"database:$ref"});
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	$tophat_cmd.="export reference=$reference\n";
-	#my $refGene=checkPath($self->{'database:refGene'});
+	#my $refGene=GATE::Error::checkPath($self->{'database:refGene'});
 	#$tophat_cmd.="export refGene=$refGene\n";
-	my $tophatpara=$self->{'CustomSetting:tophat'};
+	my $tophatpara=$self->{'setting:tophat'};
 	$tophat_cmd.=qq(export tophatpara="$tophatpara"\n);
 	my $bowtie_version=$1 if ($bowtie=~/([^\/]+)$/);
 	$bowtie_version=$1 if ($tophatpara=~/(bowtie[2]?)/);
@@ -2322,16 +2459,16 @@ sub runTopHat($$) {
 		#{
 		#	$tophat_cmd .= "ln -s \$reference $1\n" unless (-f $db_index);
 		#}
-		$tophat_cmd .= "\${bowtie_build} \$reference $db_index\n" unless (checkIndex('bowtie2',$db_index)==1);
+		$tophat_cmd .= "\${bowtie_build} \$reference $db_index\n" unless (GATE::Error::checkIndex('bowtie2',$db_index)==1);
 		$reference=$db_index;
 	}
 	$tophat_cmd .= qq(export REFERENCE=$reference\n);
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$tophat_cmd.="export workdir=$workdir\n";
 	$tophat_cmd.=qq(cd \$workdir\n);
 	
 	my @libraries=sort keys %{$self->{'LIB'}};
-	my $tophat_outdir = (exists $self->{"CustomSetting:tophat_outdir"})? $self->{"CustomSetting:tophat_outdir"} : "tophat";
+	my $tophat_outdir = (exists $self->{"setting:tophat_outdir"})? $self->{"setting:tophat_outdir"} : "tophat";
 	$tophat_cmd .= "[[ -d $tophat_outdir ]] || mkdir $tophat_outdir\n" if (!-d qq($self->{"-workdir"}/$tophat_outdir));
 	$tophat_cmd .= "cd $tophat_outdir\n";
 	foreach my $lib(@libraries) {
@@ -2376,16 +2513,16 @@ sub runTopHat($$) {
 			if (exists $self->{"software:picard"}) {
 				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$MergeSamFiles=qq(java -Xmx4g -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
-				my $MergeSamFilesPara=$self->{"CustomSetting:MergeSamFiles"};
+				my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
 				my $merge_bam=join " INPUT=",@bam;
 				$tophat_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.tophat.merge.bam\n";
 				$tophat_cmd .= "\${samtools} index $lib.merge.bam\n";
 				@{$self->{$lib}{"tophatbam"}}=();
-				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
 				if (exists $self->{$lib}{"$ref-bwabam"})
 				{
 					@{$self->{$lib}{"$ref-bwabam"}}=();
-					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
 				}
 			}
 			else {
@@ -2397,11 +2534,11 @@ sub runTopHat($$) {
 				}
 				$tophat_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
 				$tophat_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.tophat.merge.bam $merge_bam\n";
-				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+				$self->{$lib}{"tophatbam"}=$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
 				if (exists $self->{$lib}{"$ref-bwabam"})
 				{
 					@{$self->{$lib}{"$ref-bwabam"}}=();
-					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"CustomSetting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
+					push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.tophat.merge.bam";
 				}
 			}
 		}
@@ -2438,18 +2575,18 @@ sub runBLAT ($) {
 	my $self = shift;
 	my $ref = shift;
 	$ref ||= 'ref';
-	my $blat = checkPath($self->{"software:blat"});
+	my $blat = GATE::Error::checkPath($self->{"software:blat"});
 	if (!defiined $blat) {
 		return "";
 	}
 	my $blat_cmd = qq(echo `date`; echo "run blat"\n);
-	$blat_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $reference = checkPath($self->{"database:$ref"});
+	$blat_cmd .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference = GATE::Error::checkPath($self->{"database:$ref"});
 	$blat_cmd .= qq(export REFERENCE="$reference"\n);
 	$blat_cmd .= qq(export blat="$blat"\n);
-	my $blatpara = $self->{'CustomSetting:blat'};
+	my $blatpara = $self->{'setting:blat'};
 	$blat_cmd .= qq(export blatpara="$blatpara"\n);
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$blat_cmd .= qq(export workdir="$workdir"\n);
 	$blat_cmd .= qq(cd \${workdir}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -2469,122 +2606,122 @@ sub runLASTZ($) {
 #                                                       #
 #########################################################
 
-#latest version: 2.5-2-gf57256b
+## GATK 2.5-2-gf57256b
 sub runGATK ($$) {
 	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
-	my $callVar_cmd = qq(echo `date`; echo "run Samtools-Picard-GATK"\n);
-	$callVar_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $reference=checkPath($self->{"database:$ref"});
-	$callVar_cmd .= qq(export REFERENCE="$reference"\n);
-	my $heap=$self->{"CustomSetting:heap"};
-	$callVar_cmd .= qq(export heap="$heap"\n);
-	my $multi_t=$self->{"CustomSetting:multithreads"};
-	$callVar_cmd .= qq(export multithreads=$multi_t\n);
-	my $samtools = checkPath($self->{"software:samtools"});
-	$callVar_cmd .= qq(export samtools="$samtools"\n);
-	$callVar_cmd .= "\${samtools} faidx \$REFERENCE\n" unless (checkIndex('samtools',$reference)==1);
+	my $gatk_cmd = qq(echo `date`; echo "run Samtools-Picard-GATK"\n);
+	$gatk_cmd .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
+	$gatk_cmd .= qq(export REFERENCE="$reference"\n);
+	my $heap=$self->{"setting:heap"};
+	$gatk_cmd .= qq(export heap="$heap"\n);
+	my $multi_t=$self->{"setting:multithreads"};
+	$gatk_cmd .= qq(export multithreads=$multi_t\n);
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
+	$gatk_cmd .= qq(export samtools="$samtools"\n);
+	$gatk_cmd .= "\${samtools} faidx \$REFERENCE\n" unless (GATE::Error::checkIndex('samtools',$reference)==1);
 	my $samtools_path=$1 if ($samtools =~ /(\S+)\/samtools/);
 	my ($picard,$picardpath,$MergeSamFiles,$MarkDuplicates,$bamtools);
 	if (defined $samtools_path)
 	{
-		$callVar_cmd .= qq(export samtools_path="$samtools_path"\n);
-		$callVar_cmd .= qq (export PATH="\${samtools_path}":"\${samtools_path}/bcftools":\$PATH\n);
+		$gatk_cmd .= qq(export samtools_path="$samtools_path"\n);
+		$gatk_cmd .= qq (export PATH="\${samtools_path}":"\${samtools_path}/bcftools":\$PATH\n);
 	}
 	if (exists $self->{"software:picard"})
 	{
 		$picard=$self->{"software:picard"};
 		$picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
-		$callVar_cmd .= qq(export picard="$picard"\n);
+		$gatk_cmd .= qq(export picard="$picard"\n);
 		$picard = correctJavaCmd($picard,"\${heap}");
 		$MergeSamFiles=(exists $self->{"software:MergeSamFiles"})?$self->{"software:MergeSamFiles"}:qq($picardpath/MergeSamFiles.jar);
-		$callVar_cmd .= qq(export MergeSamFiles="$MergeSamFiles"\n);
+		$gatk_cmd .= qq(export MergeSamFiles="$MergeSamFiles"\n);
 		$MergeSamFiles=correctJavaCmd($MergeSamFiles,"\${heap}","./tmp_merge");
 		$MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
-		$callVar_cmd .= qq(export MarkDuplicates="$MarkDuplicates"\n);
+		$gatk_cmd .= qq(export MarkDuplicates="$MarkDuplicates"\n);
 		$MarkDuplicates=correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
 		if (defined $picard) {
-			my $dict=checkIndex('picard',$reference);
+			my $dict=GATE::Error::checkIndex('picard',$reference);
 			if ($dict==0) {
 				my $CreateSequenceDictionary="";
 				my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$CreateSequenceDictionary=(exists $self->{"software:CreateSequenceDictionary"})?$self->{"software:CreateSequenceDictionary"}:qq($picardpath/CreateSequenceDictionary.jar);
 				$CreateSequenceDictionary=correctJavaCmd($CreateSequenceDictionary,"\${heap}");
 				my $ref_prefix=$1 if ($reference=~/([^\s]+)\.fa/i);
-				$callVar_cmd .= "$CreateSequenceDictionary R=\$REFERENCE O=$ref_prefix\.dict CREATE_INDEX=true CREATE_MD5_FILE=true TRUNCATE_NAMES_AT_WHITESPACE=true VALIDATION_STRINGENCY=STRICT\n";
+				$gatk_cmd .= "$CreateSequenceDictionary R=\$REFERENCE O=$ref_prefix\.dict CREATE_INDEX=true CREATE_MD5_FILE=true TRUNCATE_NAMES_AT_WHITESPACE=true VALIDATION_STRINGENCY=STRICT\n";
 			}
 		}
 	}
 	if (defined $self->{"software:bamtools"})
 	{
-		$bamtools=checkPath($self->{"software:bamtools"});
-		$callVar_cmd .= qq(export bamtools\="$bamtools"\n);
+		$bamtools=GATE::Error::checkPath($self->{"software:bamtools"});
+		$gatk_cmd .= qq(export bamtools\="$bamtools"\n);
 	}
-	my $gatk=checkPath($self->{"software:gatk"}) if (exists $self->{"software:gatk"});
+	my $gatk=GATE::Error::checkPath($self->{"software:gatk"}) if (exists $self->{"software:gatk"});
 	$gatk=correctJavaCmd($gatk,$heap,"./tmp_gatk");
-	$callVar_cmd .= qq(export gatk="$gatk"\n);
+	$gatk_cmd .= qq(export gatk="$gatk"\n);
 	if (exists $self->{"database:dbSNP"})
 	{
-		$callVar_cmd .=qq(export dbSNP="$self->{"database:dbSNP"}"\n);
+		$gatk_cmd .=qq(export dbSNP="$self->{"database:dbSNP"}"\n);
 	}
-	my $workdir=checkPath($self->{"-workdir"});
-	my $vardir=checkPath($self->{"CustomSetting:var_outdir"});
-	$callVar_cmd .= qq(export workdir="$workdir"\n);
-	$callVar_cmd .= qq(export vardir="$vardir"\n);
-	$callVar_cmd .= qq(cd \${workdir}\n);
-	$callVar_cmd .= qq([[ -d \${vardir} ]] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
-	$callVar_cmd .= qq(cd \${vardir}\n);
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
+	my $vardir=GATE::Error::checkPath($self->{"setting:var_outdir"});
+	$gatk_cmd .= qq(export workdir="$workdir"\n);
+	$gatk_cmd .= qq(export vardir="$vardir"\n);
+	$gatk_cmd .= qq(cd \${workdir}\n);
+	$gatk_cmd .= qq([[ -d \${vardir} ]] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
+	$gatk_cmd .= qq(cd \${vardir}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $multi=0;
 	foreach my $lib(@libraries) {
 		my $bam="";
-		$callVar_cmd .= qq(echo `date`; echo "$lib"\n);
-		if (!-e qq($self->{"-workdir"}/$self->{"CustomSetting:var_outdir"}/$lib))
+		$gatk_cmd .= qq(echo `date`; echo "$lib"\n);
+		if (!-e qq($self->{"-workdir"}/$self->{"setting:var_outdir"}/$lib))
 		{
-			$callVar_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) ;
+			$gatk_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) ;
 		}
-		$callVar_cmd .= "cd $lib\n";
+		$gatk_cmd .= "cd $lib\n";
 		if (!exists $self->{$lib}{"$ref-bam"}) {
 			if (exists $self->{$lib}{"$ref-bwabam"} && @{$self->{$lib}{"$ref-bwabam"}}>1) {
 				my $merge_bam="";
 				if (defined $MergeSamFiles && $MergeSamFiles ne "") {
 ## Merge BAM 
-					#$callVar_cmd .= qq(mkdir -p ./tmp_merge);
-					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-					#$callVar_cmd .= qq(export tmp_merge="./tmpmerge");
-					#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-					my $MergeSamFilesPara=(exists $self->{"CustomSetting:MergeSamFiles"})?$self->{"CustomSetting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
+					#$gatk_cmd .= qq(mkdir -p ./tmp_merge);
+					#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					#$gatk_cmd .= qq(export tmp_merge="./tmpmerge");
+					#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 					$merge_bam=join " INPUT\=",@{$self->{$lib}{"ref-bwabam"}};
-					$callVar_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-					if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
+					$gatk_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) )
 					{
-						$callVar_cmd .= qq(rm -rf ./tmp_merge);
-						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+						$gatk_cmd .= qq(rm -rf ./tmp_merge);
+						$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 					}
 					$bam="$lib.merge.bam";
 				} else {
 					$merge_bam=join " ",@{$self->{$lib}{"ref-bwabam"}};
-					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam);
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 					foreach my $bwabam(@{$self->{$lib}{"ref-bwabam"}})
 					{
-						$callVar_cmd .=  qq(\${samtools} view -H $bwabam |grep "^\@RG" >> $lib.inh.sam);
-						$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+						$gatk_cmd .=  qq(\${samtools} view -H $bwabam |grep "^\@RG" >> $lib.inh.sam);
+						$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 					}
-					$callVar_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep "^\@PG" >> $lib.inh.sam);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-					$callVar_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep "^\@PG" >> $lib.inh.sam);
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 					$bam="$lib.merge.bam";
 				}
-				$self->{$lib}{"$ref-bam"}=qq($self->{"-workdir"}/$self->{"CustomSetting:var_outdir"}/$lib/$lib.merge.bam);
+				$self->{$lib}{"$ref-bam"}=qq($self->{"-workdir"}/$self->{"setting:var_outdir"}/$lib/$lib.merge.bam);
 			}
 			elsif (exists $self->{$lib}{"$ref-bwabam"}) {
 				$bam=${$self->{$lib}{"$ref-bwabam"}}[0];
-				#$callVar_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf && vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-				#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				#$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf && vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
+				#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 				$self->{$lib}{"$ref-bam"}=${$self->{$lib}{"$ref-bwabam"}}[0];
 			}
 		} else {
@@ -2605,8 +2742,8 @@ sub runGATK ($$) {
 #  > $PWDS/${subjectID}.fxmt.flt.stats
 		if (defined $bamtools) {
 			my $fltbam="$1.flt.bam" if ($bam=~/([^\/\s]+)\.bam$/);
-			$callVar_cmd .= qq(\${bamtools} filter -isMapped true -isPaired true -in $bam -out $fltbam);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= qq(\${bamtools} filter -isMapped true -isPaired true -in $bam -out $fltbam);
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			$bam="$lib.merge.flt.bam";
 		}
 ## Remove duplicates
@@ -2618,28 +2755,28 @@ sub runGATK ($$) {
 #  VALIDATION_STRINGENCY\=SILENT \
 #  REMOVE_DUPLICATES\=true
 		if (defined $MarkDuplicates && $MarkDuplicates ne "") {
-			#$callVar_cmd .= qq(mkdir -p ./tmp_rmdup);
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			#$callVar_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			my $MarkDuplicatesPara=(exists $self->{"CustomSetting:MarkDuplicates"})?$self->{"CustomSetting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
+			#$gatk_cmd .= qq(mkdir -p ./tmp_rmdup);
+			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			#$gatk_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
+			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 			my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
-			$callVar_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			$callVar_cmd .= qq(\${samtools} index $rmdupbam);
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= qq(\${samtools} index $rmdupbam);
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			$bam=$rmdupbam;
-			if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
+			if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) )
 			{
-				$callVar_cmd .= qq(rm -rf ./tmp_rmdup);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= qq(rm -rf ./tmp_rmdup);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			}
 		}else{
 			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
-			$callVar_cmd .= "\${samtools} rmdup $bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			$callVar_cmd .= "\${samtools} index $rmdupbam.bam";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= "\${samtools} rmdup $bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= "\${samtools} index $rmdupbam.bam";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			$bam="$rmdupbam.bam";
 		}
 ## Stat
@@ -2650,8 +2787,8 @@ sub runGATK ($$) {
 
 		if (defined $self->{"software:bamtools"}) {
 				my $stats="$1.stats" if ($bam=~/([^\/\s]+)\.bam/);
-				$callVar_cmd .= qq(\${bamtools} stats -insert -in $bam > $stats\n);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= qq(\${bamtools} stats -insert -in $bam > $stats\n);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 		} 
 
 		if (defined $gatk) {
@@ -2659,26 +2796,26 @@ sub runGATK ($$) {
 #------------------
 #Samtools calls short indels with local realignment, but it does not write a modified BAM file after the realignment.
 #The GATK though provides such a tool that realigns reads in regions with suspected indel artifacts and generates a BAM with cleaned alignments.
-			#$callVar_cmd .= "mkdir ./tmp_realign";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			$callVar_cmd .= qq($gatk -T RealignerTargetCreator -R \$REFERENCE -I $bam -o $lib.gatk.intervals);
+			#$gatk_cmd .= "mkdir ./tmp_realign";
+			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= qq($gatk -T RealignerTargetCreator -R \$REFERENCE -I $bam -o $lib.gatk.intervals);
 			if (exists $self->{"database:dbSNP"})
 			{
-				$callVar_cmd .= qq( -know \$dbSNP);
+				$gatk_cmd .= qq( -know \$dbSNP);
 			}
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
 			my $realignedbam="$1.realigned.bam" if ($bam=~/([^\/\s]+)\.bam/);
-			$callVar_cmd .= qq($gatk -T IndelRealigner -R \$REFERENCE -I $bam -o $realignedbam -targetIntervals $lib.gatk.intervals -LOD 0.4 -compress 6 -l INFO);
+			$gatk_cmd .= qq($gatk -T IndelRealigner -R \$REFERENCE -I $bam -o $realignedbam -targetIntervals $lib.gatk.intervals -LOD 0.4 -compress 6 -l INFO);
 			if (exists $self->{"database:dbSNP"})
 			{
-				$callVar_cmd .= qq( -know \$dbSNP);
+				$gatk_cmd .= qq( -know \$dbSNP);
 			}
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			if (defined $self->{"software:bamtools"})
 			{
 				my $stats="$1.stats" if ($realignedbam=~/([^\/\s]+)\.bam/);
-				$callVar_cmd .= qq(\${bamtools} stats -insert -in $realignedbam  > $stats\n);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= qq(\${bamtools} stats -insert -in $realignedbam  > $stats\n);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			}
 			$bam=$realignedbam;
 
@@ -2709,12 +2846,12 @@ sub runGATK ($$) {
 #-knownSites bundle/hg18/dbsnp_132.hg18.vcf \
 #-knownSites another/optional/setOfSitesToMask.vcf \
 #-o recal_data.grp
-			#$callVar_cmd .= "mkdir ./tmp_covar";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#$gatk_cmd .= "mkdir ./tmp_covar";
+			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			if (exists $self->{"database:dbSNP"})
 			{
-				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 
 ## Generate AnlyzeCovariates Plots
 #
@@ -2730,7 +2867,7 @@ sub runGATK ($$) {
 				}
 				else
 				{
-					$AnalyzeCovariates=checkPath("$1/resource/AnalyzeCovariates.jar") if ($self->{"software:gatk"}=~/(\S+)\/[^\/\s]+$/);
+					$AnalyzeCovariates=GATE::Error::checkPath("$1/resource/AnalyzeCovariates.jar") if ($self->{"software:gatk"}=~/(\S+)\/[^\/\s]+$/);
 					if (defined $AnalyzeCovariates && -f $AnalyzeCovariates)
 					{
 						$AnalyzeCovariates=correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
@@ -2738,10 +2875,10 @@ sub runGATK ($$) {
 				}
 				if (defined $AnalyzeCovariates)
 				{
-					$callVar_cmd .= qq(mkdir analyzeCovar_v1);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-					$callVar_cmd .= qq($AnalyzeCovariates -recalFile $lib.flt.recal_v1.csv -outputDrir analyzeCovar_v1 -ignoreQ 3);
-					$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= qq(mkdir analyzeCovar_v1);
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= qq($AnalyzeCovariates -recalFile $lib.flt.recal_v1.csv -outputDrir analyzeCovar_v1 -ignoreQ 3);
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 				}
 
 ##Base Quality Recalibration
@@ -2757,12 +2894,12 @@ sub runGATK ($$) {
 ## BaseRecalibrator
 #First pass of the base quality score recalibration -- Generates recalibration table based on various user-specified
 #covariates (such as read group, reported quality score, machine cycle, and nucleotide context).
-			#$callVar_cmd .= qq($gatk -I $bam -R \$REFERENCE  -T BaseRecalibrator -l INFO \\\n);
-			#$callVar_cmd .= qq(-recalFile recal_data.csv -cov ReadGroupCovariate -cov QualityScoreCovariate \\\n);
-			#$callVar_cmd .= qq(-cov CycleCovariate -cov DinucCovariate -cov TileCovariate\n);
-			#$callVar_cmd .= qq($gatk -I $bam -R \$REFERENCE -T TableRecalibration -l INFO \\\n);
-			#$callVar_cmd .= qq(-recalFile recal_data.csv --output_bam $lib.merge.sort.alnRecal.bam\n);
-			#$callVar_cmd .= "$samtools index $lib.merge.sort.alnRecal.bam\n";
+			#$gatk_cmd .= qq($gatk -I $bam -R \$REFERENCE  -T BaseRecalibrator -l INFO \\\n);
+			#$gatk_cmd .= qq(-recalFile recal_data.csv -cov ReadGroupCovariate -cov QualityScoreCovariate \\\n);
+			#$gatk_cmd .= qq(-cov CycleCovariate -cov DinucCovariate -cov TileCovariate\n);
+			#$gatk_cmd .= qq($gatk -I $bam -R \$REFERENCE -T TableRecalibration -l INFO \\\n);
+			#$gatk_cmd .= qq(-recalFile recal_data.csv --output_bam $lib.merge.sort.alnRecal.bam\n);
+			#$gatk_cmd .= "$samtools index $lib.merge.sort.alnRecal.bam\n";
 			#$bam="$lib.merge.sort.alnRecal.bam";
 #Creating a recalibrated BAM
 #java -Xmx${heap}m -Djava.io.tmpdir\=${tmp_folder}_recal \
@@ -2786,8 +2923,8 @@ sub runGATK ($$) {
 #   -BQSR recalibration_report.grp \
 #   -o output.bam
 				my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
-				$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 				$bam = $recalbam;
 
 ## Re-analysis of covariatesDetermine the covariates affecting base quality scores
@@ -2805,119 +2942,118 @@ sub runGATK ($$) {
 # -cov DinucCovariate \
 # -recalFile $PWDS/${subjectID}.flt.recal_v2.csv  \
 # -L $ExonFile
-				$callVar_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v2.csv);
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -nt $self->{"CustomSetting:multithreads"} && ) : "\n";
+				$gatk_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v2.csv);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
 			}
 			#else
 			#{
-			#	$callVar_cmd .= qq($gatk -T BaseRecalibrator -I $bam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -o $lib.recalibration_report.grp --intermediate_csv_file $lib.recal.csv --plot_pdf_file $lib.comp.pdf);
-			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#	$gatk_cmd .= qq($gatk -T BaseRecalibrator -I $bam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -o $lib.recalibration_report.grp --intermediate_csv_file $lib.recal.csv --plot_pdf_file $lib.comp.pdf);
+			#	$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			#	my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
-			#	$callVar_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-			#	$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			#	$gatk_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
+			#	$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			#	$bam = $recalbam;
 			#}
 
 ## BAQ calmd
 			my $baqbam = "$1.baq.bam" if ($bam=~/([^\/\s]+)\.bam$/);
-			$callVar_cmd .= "\${samtools} calmd -Abr $bam \$REFERENCE > $baqbam && \${samtools} index $baqbam";
+			$gatk_cmd .= "\${samtools} calmd -Abr $bam \$REFERENCE > $baqbam && \${samtools} index $baqbam";
 			$bam = $baqbam;
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 
 ## Genotyping calling
-			$callVar_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
-			#$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? qq( -ct $self->{"CustomSetting:multithreads"} -nt $self->{"CustomSetting:multithreads"} -nct $self->{"CustomSetting:multithreads"} && ) : "\n";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
+			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? qq( -ct $self->{"setting:multithreads"} -nt $self->{"setting:multithreads"} -nct $self->{"setting:multithreads"} && ) : "\n";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
 				my $bgzip;
 				if (exists $self->{"software:bgzip"})
 				{
-					$bgzip=checkPath($self->{"software:bgzip"});
+					$bgzip=GATE::Error::checkPath($self->{"software:bgzip"});
 				}
 				else
 				{
-					my $tabix=checkPath($self->{"software:tabix"}) if (exists $self->{"software:tabix"});
+					my $tabix=GATE::Error::checkPath($self->{"software:tabix"}) if (exists $self->{"software:tabix"});
 					$bgzip=$tabix;
 					$bgzip=~s/tabix$/bgzip/;
 				}
-				$callVar_cmd .= "$bgzip $lib.gatk.var.vcf";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= "$bgzip $lib.gatk.var.vcf";
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			}
 
 ##coverage
 #-------------------
 #The GATK provides a tool to assess the depth of coverage over any number of intervals in a BAM file.
 #The coverage will be displayed in the output for every single position plus as an average over each interval specified.
-			if (exists $self->{"CustomSetting:TargetIntervalList"})
+			if (exists $self->{"setting:TargetIntervalList"})
 			{
-				my $TL=checkPaht($self->{"CustomSetting:TargetIntervalList"});
-				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				my $TL=checkPaht($self->{"setting:TargetIntervalList"});
+				$gatk_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			} else {
 				#my $output_prefix = $1 if ($bam=~/([^\/\s]+)\.bam/i);
-				$callVar_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			}
-			#$bam=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
-			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
-			$self->{$lib}{"$ref-vcf"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$lib.gatk.var.vcf";
-			if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) )
+			#$bam=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
+			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
+			$self->{$lib}{"$ref-vcf"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$lib.gatk.var.vcf";
+			if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) )
 			{
-				$callVar_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
-				$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 			}
 		} else {
-			$callVar_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:var_outdir"}."/$lib/$bam";
+			$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
 		}
 		if (exists $self->{"software:sam2reads"}) {
 			my $name=$1 if ($bam=~/([^\/\s]+).bam/);
-			my $sam2reads=checkPath($self->{"software:sam2reads"});
-			$callVar_cmd .= "\${samtools} view -F 4 $bam | $sam2reads -R1 $name\_mapped.R1.fastq -R2 $name\_mapped.R2.fastq -R3 $name\_mapped.R3.fastq -f fq";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
-			$callVar_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
-			$callVar_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " && " : "\n";
+			my $sam2reads=GATE::Error::checkPath($self->{"software:sam2reads"});
+			$gatk_cmd .= "\${samtools} view -F 4 $bam | $sam2reads -R1 $name\_mapped.R1.fastq -R2 $name\_mapped.R2.fastq -R3 $name\_mapped.R3.fastq -f fq";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
+			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
 		}
 		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
-			$callVar_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
+			$gatk_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
 		}
 		$multi++;
-		$callVar_cmd  =~ s/\&*\s*$//;
-		$callVar_cmd .= ((exists $self->{"CustomSetting:multithreads"}) && ($multi % $self->{"CustomSetting:multithreads"}!=0) && ($multi<@libraries)) ? " &\n" : "\n";
-		$callVar_cmd .= "cd ..\n";
+		$gatk_cmd  =~ s/\&*\s*$//;
+		$gatk_cmd .= ((exists $self->{"setting:multithreads"}) && ($multi % $self->{"setting:multithreads"}!=0) && ($multi<@libraries)) ? " &\n" : "\n";
+		$gatk_cmd .= "cd ..\n";
 	}
-	$callVar_cmd  =~ s/\&*\s*$/\n/;
-	$callVar_cmd .= "cd ..\n";
-	return $callVar_cmd;
+	$gatk_cmd  =~ s/\&*\s*$/\n/;
+	$gatk_cmd .= "cd ..\n";
+	return $gatk_cmd;
 }
 
+sub runDindel ($) {
 #/usr/local/bin/dindel --analysis getCIGARindels --bamFile realigned.baq.bam --outputFile dindel_output --ref reference.fa
 #python /usr/local/bin/makeWindows.py --inputVarFile dindel_output.variants.txt --windowFilePrefix realign_windows --numWindowsPerFile 1000
 #perl -e 'my @f=glob("realign_windows.*.txt");foreach (@f){my $prefix="dindel_stage2_output_windows.$1" if ($_=~/windows\.(\d+)\./);system "/usr/local/bin/dindel --analysis indels --doDiploid --bamFile realigned.baq.bam --ref reference.fa --varFile $_ --libFile dindel_output.libraries.txt --outputFile $prefix";}'
 #ls dindel_stage2_output_windows.*.glf.txt > dindel_stage2_outputfiles.txt
 #python /usr/local/bin/mergeOutputDiploid.py --inputFiles dindel_stage2_outputfiles.txt --outputFile variantCalls.VCF --ref reference.fa 
-
-sub runDindel ($) {
 	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
 	if (!exists $self->{"software:dindel"}) {
 		return "";
 	}
-	my $dindel=checkPath($self->{"software:dindel"});
+	my $dindel=GATE::Error::checkPath($self->{"software:dindel"});
 	my $dindel_cmd = qq(echo `date`; echo "run dindel"\n);
-	$dindel_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$dindel_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$dindel_cmd .= qq(export dindel=$dindel\n);
-	my $para = $self->{"CustomSetting:dindel"};
+	my $para = $self->{"setting:dindel"};
 	$dindel_cmd .= qq(export para="$para"\n);
-	my $multithreads = $self->{"CustomSetting:multithreads"};
+	my $multithreads = $self->{"setting:multithreads"};
 	my $multirun = $self->{"software:multithreads-run"};
 	$dindel_cmd .= qq(export multirun=$multirun\n);
 	my $reference = $self->{"database:$ref"};
 	$dindel_cmd .= qq(export REFERENCE=$reference\n);
-	my $dindel_output=(exists $self->{"CustomSetting:dindel_outdir"})?$self->{"CustomSetting:dindel_outdir"}:"dindel";
+	my $dindel_output=(exists $self->{"setting:dindel_outdir"})?$self->{"setting:dindel_outdir"}:"dindel";
 	$dindel_cmd .= "[[ -d $dindel_output ]] || mkdir $dindel_output\n";
 	$dindel_cmd .= "cd $dindel_output\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -2934,22 +3070,27 @@ sub runDindel ($) {
 			$dindel_cmd .= qq(push \@cmdary,qq\(\"$dindel --analysis indels --doDiploid --bamFile $bam --ref $reference --varFile \$f[\$i] --libFile $lib.dindel_output.libraries.txt --outputFile \$prefix\"\);}my \$cmd="$multirun ".join " ",\@cmdary;system \$cmd}\'\n);
 			$dindel_cmd .= qq(ls $lib.dindel_stage2_output_windows.*.glf.txt > $lib.dindel_stage2_outputfiles.txt\n);
 			$dindel_cmd .= qq(mergeOutputDiploid.py --inputFiles $lib.dindel_stage2_outputfiles.txt --outputFile $lib.variantCalls.VCF --ref \${REFERENCE}\n);
-			$dindel_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"CustomSetting:Clean"} && ($self->{"CustomSetting:Clean"}=~/y/i || $self->{"CustomSetting:Clean"}=~/TRUE/i) );
+			$dindel_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"setting:Clean"} && ($self->{"setting:Clean"}=~/y/i || $self->{"setting:Clean"}=~/TRUE/i) );
 			$dindel_cmd .= qq(cd ..\n);
 		}
 	}
 	return $dindel_cmd;
 }
 
+sub runPindel ($) {
 #mkdir output
 #./pindel -f demo/hs_ref_chr20.fa -p demo/COLO-829_20-p_ok.txt -c 20 -o output/ref
 #./pindel -f demo/simulated_reference.fa -i demo/simulated_config.txt -c ALL -o output/simulated
 #./pindel -f <reference.fa> -p <pindel_input> [and/or -i bam_configuration_file] -c <chromosome_name> -o <prefix_for_output_files>
-sub runPindel ($) {
 	
 }
 
+# iSAAC
+sub runiSAAC ($) {
+	
+}
 
+sub runSNVer ($) {
 ##a) For individual sequencing data
 # /path/to/java -jar /path/to/SNVer-0.2.0/SNVerIndividual.jar \
 # -i pe.sorted.dedup.bam -o prefix_of_output -r ref.fasta -l target.bed
@@ -2963,13 +3104,14 @@ sub runPindel ($) {
 ## Annotation
 #/path/to/annovar/convert2annovar.pl -format vcf4 pe.vcf > input
 #/path/to/annovar/summarize_annovar.pl --verdbsnp 132 --buildver hg19 \
-#--outfile sum input /path/to/humandb 
-sub runSNVer ($) {
-	
+#--outfile sum input /path/to/humandb 	
 }
 
-#"A program for annotating and predicting the effects of single nucleotide polymorphisms,SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]
 sub runSnpEff ($) {
+#"A program for annotating and predicting the effects of single nucleotide polymorphisms,
+#SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", 
+#Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 
+#2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]
 	my $self=shift;
 }
 
@@ -2977,6 +3119,7 @@ sub runSnpSift ($) {
 	my $self=shift;
 }
 
+sub runSOAPsnp($) {
 #soapsnp -B aln.bam -d reference.fa -o cns -r 0.0005 -e 0.001 -u -L 150 -2 -Q J -s dbSNP -T region.out -m
 #The dbSNP file consist of a lot of lines like this one:
 #	chr1    201979756       1       1       0       0.161   0       0       0.839   rs568
@@ -2986,7 +3129,6 @@ sub runSnpSift ($) {
 #	frequency of A, frequency of C, frequency of T, frequency of G, SNP id. For known SNP sites that do
 #	not have allele frequency information, the frequency information can be arbitrarily determined as 
 #	any positive values, which only imply what alleles have already been deposited in the database.
-sub runSOAPsnp($) {
 	my $self=shift;
 }
 
@@ -3014,6 +3156,14 @@ sub runSOAPsnv ($) {
 	
 }
 
+sub runSOAPindel ($) {
+	
+}
+
+sub runSOAPpopindel ($) {
+	
+}
+
 sub runSOAPsv ($) {
 	
 }
@@ -3035,16 +3185,16 @@ sub runCufflinks($) {
 		return "";
 	}
 	my $cufflinks_cmd = qq(echo `date`; echo "run Cufflinks"\n);
-	$cufflinks_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $cufflinks=checkPath($self->{'software:cufflinks'});
+	$cufflinks_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $cufflinks=GATE::Error::checkPath($self->{'software:cufflinks'});
 	$cufflinks_cmd .= qq(export cufflinks=$cufflinks\n);
-	my $gffread=checkPath($self->{'software:gffread'}) if (exists $self->{'software:gffread'});
+	my $gffread=GATE::Error::checkPath($self->{'software:gffread'}) if (exists $self->{'software:gffread'});
 	$cufflinks_cmd .= qq(export gffread=$gffread\n) if (defined $gffread);
-	my $bowtie=checkPath($self->{'software:bowtie'});
+	my $bowtie=GATE::Error::checkPath($self->{'software:bowtie'});
 	$cufflinks_cmd .= qq(export bowtie=$bowtie\n);
-	my $reference=checkPath($self->{'database:ref'});
+	my $reference=GATE::Error::checkPath($self->{'database:ref'});
 	$cufflinks_cmd .= qq(export reference=$reference\n);
-	my $refGene=checkPath($self->{'database:refGene'});
+	my $refGene=GATE::Error::checkPath($self->{'database:refGene'});
 	if (defined $gffread)
 	{
 		if ($refGene=~/\.gff/i)
@@ -3069,7 +3219,7 @@ sub runCufflinks($) {
 		}
 	}
 	$cufflinks_cmd .= qq(export refGene=$refGene\n);
-	my $para=$self->{'CustomSetting:cufflinks'};
+	my $para=$self->{'setting:cufflinks'};
 	$cufflinks_cmd .= qq(export para="$para"\n);
 	my $workdir=$self->{"-workdir"};
 	$cufflinks_cmd .= qq(export workdir=$workdir\n);
@@ -3103,30 +3253,30 @@ sub runCuffMerge($) {
 		return "";
 	}
 	#cuffmerge -s ../05.db/w14_v7.2.fasta -p 4 assembly_GTF_list.txt
-	my $reference=checkPath($self->{"database:$ref"});
-	my $para=$self->{'CustomSetting:cuffmerge'};
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
+	my $para=$self->{'setting:cuffmerge'};
 	my $cuffmerge="";
 	if (exists $self->{'software:cuffmerge'}) {
-		$cuffmerge=checkPath($self->{'software:cuffmerge'});
+		$cuffmerge=GATE::Error::checkPath($self->{'software:cuffmerge'});
 	} else {
-		$cuffmerge=checkPath($self->{'software:cufflinks'});
+		$cuffmerge=GATE::Error::checkPath($self->{'software:cufflinks'});
 		$cuffmerge=~s/cufflinks$/cuffmerge/;
 	}
 	my $cuffmerge_cmd = qq(echo `date`; echo "run Cuffmerge"\n);
 	$cuffmerge_cmd .= qq(cd $self->{"-workdir"}\n);
-	$cuffmerge_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$cuffmerge_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$cuffmerge_cmd .= qq(export REFERENCE=$reference\n);
 	$cuffmerge_cmd .= "[[ -d cuffmerge ]] || mkdir cuffmerge\n" if (!-d qq($self->{"-workdir"}/cuffmerge));
 	$cuffmerge_cmd .= "cd cuffmerge\n";
 	if (exists $self->{'database:$gene'}) {
-		my $refGene=checkPath($self->{'database:$gene'});
+		my $refGene=GATE::Error::checkPath($self->{'database:$gene'});
 		my $all_transcripts=join "\\n",@{$self->{'transcript-gtf'}};
 		$cuffmerge_cmd.=qq(perl -e 'print "$all_transcripts\\n"' > GTF_list.txt\n);
 		$cuffmerge_cmd.="$cuffmerge $para -g $refGene -s \$REFERENCE -p 10 GTF_list.txt\n";
 	} else {
 		my $all_transcripts=join "\\n",@{$self->{'transcript-gtf'}};
 		$cuffmerge_cmd.=qq(perl -e 'print "$all_transcripts\\n"' > GTF_list.txt\n);
-		$cuffmerge_cmd.=qq($cuffmerge $para -s \$REFERENCE -p $self->{"CustomSetting:multithreads"} GTF_list.txt\n);
+		$cuffmerge_cmd.=qq($cuffmerge $para -s \$REFERENCE -p $self->{"setting:multithreads"} GTF_list.txt\n);
 	}
 	$self->{'merged-gtf'}=$self->{'-workdir'}."/cuffmerge/merged_asm/merged.gtf";
 	$self->{'merged-transcripts-gtf'}=$self->{'-workdir'}."/cuffmerge/merged_asm/transcripts.gtf";
@@ -3137,7 +3287,7 @@ sub runCuffMerge($) {
 			$cuffmerge_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/cuffmerge/$lib));
 			$cuffmerge_cmd .= "cd $lib\n";
 			if (exists $self->{'database:$gene'}) {
-				my $refGene=checkPath($self->{'database:$gene'});
+				my $refGene=GATE::Error::checkPath($self->{'database:$gene'});
 				$cuffmerge_cmd.=qq(echo "$self->{$lib}{'transcript-gtf'}" > $lib\_GTF_list.txt\n);
 				$cuffmerge_cmd.="$cuffmerge $para -g $refGene -s \$REFERENCE -p 10 $lib\_GTF_list.txt\n";
 			} else {
@@ -3153,29 +3303,29 @@ sub runCuffMerge($) {
 	return ($cuffmerge_cmd);
 }
 
+sub runCuffCompare($) {
 #cuffcompare -i input_gtf_list -r ../reference/genes.gtf -o compare_out 2> cuffcompare.log &
 #cuffcompare -s ../05.db/w14_v7.2.fasta -p 4 assembly_GTF_list.txt
-sub runCuffCompare($) {
 	my $self=shift;
 
 	if (!exists $self->{"software:cuffcompare"} || !defined $self->{"software:cuffcompare"}) {
 		return "";
 	}
 	my $cuffcompare_cmd = qq(echo `date`; echo "run Cuffcompare"\n);;
-	$cuffcompare_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $reference=checkPath($self->{'database:ref'});
+	$cuffcompare_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference=GATE::Error::checkPath($self->{'database:ref'});
 	$cuffcompare_cmd .= qq(export REFERENCE\="$reference"\n);
 	if (exists $self->{'database:$gene'}) {
 		my $refGene=$self->{'database:$gene'};
 		$cuffcompare_cmd.=qq(export refGene="$refGene"\n);
 	}
-	my $para=$self->{'CustomSetting:cuffcompare'};
+	my $para=$self->{'setting:cuffcompare'};
 	$cuffcompare_cmd .= qq(export para="$para"\n);
 	my $cuffcompare="";
 	if (exists $self->{'software:cuffcompare'}) {
-		$cuffcompare=checkPath($self->{'software:cuffcompare'});
+		$cuffcompare=GATE::Error::checkPath($self->{'software:cuffcompare'});
 	} else {
-		$cuffcompare=checkPath($self->{'software:cufflinks'});
+		$cuffcompare=GATE::Error::checkPath($self->{'software:cufflinks'});
 		$cuffcompare=~s/cufflinks$/cuffcompare/;
 	}
 	$cuffcompare_cmd=qq(export cuffcompare=$cuffcompare\n);
@@ -3218,22 +3368,21 @@ sub runCuffCompare($) {
 	return ($cuffcompare_cmd);
 }
 
-
+sub runTrinity($) {
 #Trinity.pl --seqType fq --JM 100G --left reads_1.fq  --right reads_2.fq --CPU 6
 #TRINITY_RNASEQ_ROOT/util/alignReads.pl --left left.fq --right right.fq --seqType fq --target Trinity.fasta --aligner bowtie
 #TRINITY_RNASEQ_ROOT/util/RSEM_util/run_RSEM.pl --transcripts Trinity.fasta --name_sorted_bam bowtie_out.nameSorted.sam.+.sam.PropMapPairsForRSEM.bam --paired
-sub runTrinity($) {
 	my $self=shift;
-	my $trinity=checkPath($self->{"software:trinity"});
+	my $trinity=GATE::Error::checkPath($self->{"software:trinity"});
 	my $trinity_cmd = qq(echo `date`; echo "run Trinity"\n);
-	$trinity_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	if (exists $self->{'CustomSetting:TRINITY_RNASEQ_ROOT'}) {
-		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$self->{'CustomSetting:TRINITY_RNASEQ_ROOT'}"\n);
+	$trinity_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	if (exists $self->{'setting:TRINITY_RNASEQ_ROOT'}) {
+		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$self->{'setting:TRINITY_RNASEQ_ROOT'}"\n);
 	} else {
 		my $trinity_root=$1 if ($trinity=~/(\S+)\/[^\/]$/);
 		$trinity_cmd .= qq(export TRINITY_RNASEQ_ROOT="$trinity_root"\n);
 	}
-	my $para=(exists $self->{"CustomSetting:trinity"})?$self->{"CustomSetting:trinity"}:qq(--seqType fq --JM 100G --CPU $self->{"CustomSetting:multithreads"});
+	my $para=(exists $self->{"setting:trinity"})?$self->{"setting:trinity"}:qq(--seqType fq --JM 100G --CPU $self->{"setting:multithreads"});
 	$trinity_cmd .= qq(cd $self->{"-workdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
@@ -3322,14 +3471,14 @@ sub runTrinity($) {
 
 sub runVelvetOases ($) {
 	my $self=shift;
-	my $velveth=checkPath($self->{"software:velveth"});
+	my $velveth=GATE::Error::checkPath($self->{"software:velveth"});
 	my $velvet_cmd = qq(echo `date`; echo "run Velvet-Oases"\n);
-	$velvet_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$velvet_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$velvet_cmd .= qq(export velvet="$velveth"\n);
 	my $velvetg="";
 	if (exists $self->{"software:velvetg"})
 	{
-		$velvetg=checkPath($self->{"software:velvetg"});
+		$velvetg=GATE::Error::checkPath($self->{"software:velvetg"});
 		$velvet_cmd .= qq(export velveg="$velvetg"\n);
 	}
 	else
@@ -3338,13 +3487,13 @@ sub runVelvetOases ($) {
 		$velvetg=~s/velveth$/velvetg/;
 		$velvet_cmd .= qq(export velveg="$velvetg"\n);
 	}
-	my $oases=checkPath($self->{"software:oascs"}) if (exists $self->{"software:oascs"});
+	my $oases=GATE::Error::checkPath($self->{"software:oascs"}) if (exists $self->{"software:oascs"});
 	$velvet_cmd .= qq(export oases="$oases"\n) if (defined $oases);
-	my $velvethpara = $self->{'CustomSetting:velveth'};
+	my $velvethpara = $self->{'setting:velveth'};
 	$velvet_cmd .= qq(export velvethpara="$velvethpara"\n);
-	my $velvetgpara = $self->{'CustomSetting:velvetg'};
+	my $velvetgpara = $self->{'setting:velvetg'};
 	$velvet_cmd .= qq(export velvetgpara="$velvetgpara"\n);
-	my $oasespara = $self->{'CustomSetting:oases'} if (exists $self->{'CustomSetting:oases'});
+	my $oasespara = $self->{'setting:oases'} if (exists $self->{'setting:oases'});
 	$velvet_cmd .= qq(export oasespara="$oasespara"\n) if (defined $oasespara);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
@@ -3396,19 +3545,19 @@ sub runTransABySS ($) {
 	my $self=shift;
 }
 
-#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
 sub runSOAPdenovo ($) {
+#SOAPdenovo-63mer all -s WGS_soapdenovo.config -K 25 -F -p 32 -a 92 -m 51 -M 1 -E -k 31 -F -L 100 -V -o WGS_25mer 1> 25mer.log 2> 25mer.log
 	my $self=shift;
 	if (!exists $self->{"software:soapdenovo"})
 	{
 		return "";
 	}
-	my $soapdenovo=checkPath($self->{"software:soapdenovo"}) if (exists $self->{"software:soapdenovo"});
+	my $soapdenovo=GATE::Error::checkPath($self->{"software:soapdenovo"}) if (exists $self->{"software:soapdenovo"});
 	my $soapdenovo_cmd = qq(echo `date`; echo "run SOAPdenvo|SOAPdenovo-Trans"\n);
-	$soapdenovo_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$soapdenovo_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$soapdenovo_cmd .= qq(export soapdenvo="$soapdenovo"\n);
-	my $config=checkPath($self->{"CustomSetting:soapdenovo_config"}) if (exists $self->{"CustomSetting:soapdenovo_config"});
-	my $para=$self->{"CustomSetting:soapdenovo"};
+	my $config=GATE::Error::checkPath($self->{"setting:soapdenovo_config"}) if (exists $self->{"setting:soapdenovo_config"});
+	my $para=$self->{"setting:soapdenovo"};
 	$soapdenovo_cmd .= qq(export soapdenvo_para="$para"\n);
 	$config=$1 if ($para=~/\-s\s+(\S+)/);
 	$soapdenovo_cmd .= qq(cd $self->{"-workdir"}\n);
@@ -3435,6 +3584,10 @@ sub runSOAPdenovo ($) {
 		}
 	}
 	return $soapdenovo_cmd;
+}
+
+sub runSOAPdenvoTrans ($) {
+	
 }
 
 sub make_config {
@@ -3490,7 +3643,7 @@ sub make_config {
 }
 
 
-sub runGapClouser ($) {
+sub runGapCloser ($) {
 	
 }
 
@@ -3498,9 +3651,8 @@ sub runGapFiller ($) {
 	
 }
 
-
-#phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
 sub runPhrap ($) {
+#phrap seq.fas -new_ace -revise_greedy -shatter_greedy -forcelevel 0 -repeat_stringency 0.95 > phrap.out
 	
 }
 
@@ -3524,21 +3676,20 @@ sub runPCAP ($) {
 	
 }
 
-
+sub runNewbler ($) {
 #/opt/454/bin/newAssembly BAC1
 #/opt/454/bin/addRun BAC1 ~/01.data/W14/454/BAC/5_BAC_454/BAC_1.sff 
 #/opt/454/bin/runProject -cpu 8 BAC1
-sub runNewbler ($) {
 	my $self = shift;
-	if (!exists $self->{"CustomSetting::Newbler"} || !-d $self->{"CustomSetting::Newbler"}) {
+	if (!exists $self->{"setting::Newbler"} || !-d $self->{"setting::Newbler"}) {
 		return "";
 	}
 	my $newbler_cmd = qq(echo `date`; echo "run Newbler"\n);
-	$newbler_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	$newbler_cmd .= qq(export NEWBLER="$self->{"CustomSetting::Newbler"}"\n);
-	my $para = $self->{'CustomSetting:Newbler'} if (exists $self->{'CustomSetting:Newbler'});
+	$newbler_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$newbler_cmd .= qq(export NEWBLER="$self->{"setting::Newbler"}"\n);
+	my $para = $self->{'setting:Newbler'} if (exists $self->{'setting:Newbler'});
 	$newbler_cmd .= qq(export para=$para) if (defined $para);
-	my $workdir .= checkPath($self->{"-workdir"});
+	my $workdir .= GATE::Error::checkPath($self->{"-workdir"});
 	$newbler_cmd .= qq(export workdir=$workdir\n);
 	$newbler_cmd .= qq(cd \${workdir}\n);
 	$newbler_cmd .= "[[ -d newbler }] || mkdir newbler\n" if (!-d qq($self->{"-workdir"}/newbler));
@@ -3564,6 +3715,7 @@ sub runNewbler ($) {
 	return $newbler_cmd;
 }
 
+sub runMSR_CA($) {
 #==>sr_config.txt<==
 #PATHS
 #JELLYFISH_PATH=/usr/local/genome/MSR-CA-1.6.1/bin
@@ -3584,7 +3736,6 @@ sub runNewbler ($) {
 #NUM_THREADS= 16
 #JF_SIZE=500000000
 #END
-sub runMSR_CA($) {
 	my $self = shift;
 }
 
@@ -3605,22 +3756,22 @@ sub runCuffdiff($) {
 #BF1_tophat/accepted_hits.bam,BF2_tophat/accepted_hits.bam,BF3_tophat/accepted_hits.bam
 #ST1_tophat/accepted_hits.bam,ST2_tophat/accepted_hits.bam,ST3_tophat/accepted_hits.bam
 	my $cuffdiff_cmd = qq(echo `date`; echo "run Cuffdiff"\n);
-	$cuffdiff_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $reference=checkPath($self->{"database:$ref"});
+	$cuffdiff_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	$cuffdiff_cmd .= qq(export reference=$reference\n);
-	my $refGene=(exists $self->{"database:$gene"})?checkPath($self->{"database:$gene"}):$self->{$gene};
+	my $refGene=(exists $self->{"database:$gene"})?GATE::Error::checkPath($self->{"database:$gene"}):$self->{$gene};
 	$cuffdiff_cmd .= qq(export refGene=$refGene\n);
 	my $cuffdiff="";
 	if (exists $self->{'software:cuffdiff'}) {
-		$cuffdiff=checkPath($self->{'software:cuffdiff'});
+		$cuffdiff=GATE::Error::checkPath($self->{'software:cuffdiff'});
 	} else {
-		$cuffdiff=checkPath($self->{'software:cufflinks'});
+		$cuffdiff=GATE::Error::checkPath($self->{'software:cufflinks'});
 		$cuffdiff=~s/cufflinks$/cuffdiff/;
 	}
 	$cuffdiff_cmd .= qq(export cuffdiff=$cuffdiff\n);
-	my $para = $self->{'CustomSetting:cuffdiff'};
+	my $para = $self->{'setting:cuffdiff'};
 	$cuffdiff_cmd .= qq(export para="$para"\n);
-	my $workdir .= checkPath($self->{"-workdir"});
+	my $workdir .= GATE::Error::checkPath($self->{"-workdir"});
 	$cuffdiff_cmd .= qq(export workdir=$workdir\n);
 	$cuffdiff_cmd .= qq(cd \${workdir}\n);
 	$cuffdiff_cmd .= "[[ -d cuffdiff ]] || mkdir cuffdiff\n" if (!-d qq($self->{"-workdir"}/cuffdiff));
@@ -3656,21 +3807,21 @@ sub runAlternativeSplicing($) {
 	{
 		return "";
 	}
-	my $samtools = checkPath($self->{"software:samtools"});
-	my $SamToFastq=checkPath($self->{"software:SamToFastq"});
-	my $AlternativeSplicing=checkPath($self->{"software:AlternativeSplicing"});
-	my $bwa=checkPath($self->{"software:bwa"});
-	my $getAlnGene = checkPath($self->{"software:getAlnGene"});
-	my $reference=checkPath($self->{"database:ref"});
-	my $refGene=checkPath($self->{"database:refGene"});
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
+	my $SamToFastq=GATE::Error::checkPath($self->{"software:SamToFastq"});
+	my $AlternativeSplicing=GATE::Error::checkPath($self->{"software:AlternativeSplicing"});
+	my $bwa=GATE::Error::checkPath($self->{"software:bwa"});
+	my $getAlnGene = GATE::Error::checkPath($self->{"software:getAlnGene"});
+	my $reference=GATE::Error::checkPath($self->{"database:ref"});
+	my $refGene=GATE::Error::checkPath($self->{"database:refGene"});
 	
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $runAS_cmd = qq(echo `date`; echo "run AlternativeSplicing"\n);
 	$runAS_cmd .= qq(cd $self->{"-workdir"}\n);
-	$runAS_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$runAS_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$runAS_cmd .= qq(export REFERENCE=$reference\n);
 	$runAS_cmd .= qq(export refGene=$refGene\n);
-	$runAS_cmd .= qq(mkdir $self->{"CustomSetting:as_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:as_outdir"}));
+	$runAS_cmd .= qq(mkdir $self->{"setting:as_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:as_outdir"}));
 	$runAS_cmd .= "cd as\n";
 	foreach my $lib(@libraries) {
 		$runAS_cmd .= qq(echo `date`; echo "$lib"\n);
@@ -3685,7 +3836,7 @@ sub runAlternativeSplicing($) {
 				$runAS_cmd .= "$samtools sort $lib.merge.bam $lib.merge.sort\n";
 				$runAS_cmd .= "$samtools index $lib.merge.bam $lib.merge.sort.bam\n";
 				$bam="$lib.merge.sort.bam";
-				$self->{$lib}{"ref-bam"}=$self->{'-workdir'}."/".$self->{"CustomSetting:as_outdir"}."/$lib/$lib.merge.sort.bam";
+				$self->{$lib}{"ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:as_outdir"}."/$lib/$lib.merge.sort.bam";
 			} else {
 				$bam=${@{$self->{$lib}{"ref-bwabam"}}}[0];
 				$self->{$lib}{"ref-bam"}=${@{$self->{$lib}{"ref-bwabam"}}}[0];
@@ -3719,8 +3870,8 @@ sub runAlternativeSplicing($) {
 		$runAS_cmd .= "$samtools sort ASresult/JunctionRecord.bam ASresult/JunctionRecord.sort\n";
 		$runAS_cmd .= "$samtools index ASresult/JunctionRecord.sort.bam\n";
 		$runAS_cmd .= "cd ..\n";
-		$self->{$lib}{"AS_result-gff"}=$self->{'-workdir'}."/".$self->{"CustomSetting:as_outdir"}."/$lib/ASresult/AS_result.gff";
-		$self->{$lib}{"Junctions-bed"}=$self->{'-workdir'}."/".$self->{"CustomSetting:as_outdir"}."/$lib/ASresult/Junctions.bed";
+		$self->{$lib}{"AS_result-gff"}=$self->{'-workdir'}."/".$self->{"setting:as_outdir"}."/$lib/ASresult/AS_result.gff";
+		$self->{$lib}{"Junctions-bed"}=$self->{'-workdir'}."/".$self->{"setting:as_outdir"}."/$lib/ASresult/Junctions.bed";
 	}
 	$runAS_cmd .= "cd ..\n";
 	return ($runAS_cmd);
@@ -3728,19 +3879,19 @@ sub runAlternativeSplicing($) {
 
 sub runASAP ($) {
 	my $self = shift;
-	my $samtools = checkPath($self->{"software:samtools"});
-	my $asap = checkPath($self->{"software:asap"});
-	my $para = (exists $self->{"CustomSetting:asap"}) ? $self->{"CustomSetting:asap"} : "";
-	my $reference=checkPath($self->{"database:ref"});
-	my $refGene=checkPath($self->{"database:refGene"});
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
+	my $asap = GATE::Error::checkPath($self->{"software:asap"});
+	my $para = (exists $self->{"setting:asap"}) ? $self->{"setting:asap"} : "";
+	my $reference=GATE::Error::checkPath($self->{"database:ref"});
+	my $refGene=GATE::Error::checkPath($self->{"database:refGene"});
 	
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $runAS_cmd = qq(echo `date`; echo "run ASAP"\n);
 	$runAS_cmd .= qq(cd $self->{"-workdir"}\n);
-	$runAS_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$runAS_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$runAS_cmd .= qq(export REFERENCE=$reference\n);
 	$runAS_cmd .= qq(export refGene=$refGene\n);
-	$runAS_cmd .= qq(mkdir $self->{"CustomSetting:as_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:as_outdir"}));
+	$runAS_cmd .= qq(mkdir $self->{"setting:as_outdir"}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:as_outdir"}));
 	$runAS_cmd .= "cd as\n";
 	foreach my $lib(@libraries) {
 		$runAS_cmd .= qq(echo `date`; echo "$lib"\n);
@@ -3774,15 +3925,15 @@ sub runGenePlot ($) {
 	if (!exists $self->{"software:GenePlot"} || !defined $self->{"software:GenePlot"}) {
 		return "";
 	}
-	my $GenePlot = checkPath($self->{"software:GenePlot"});
+	my $GenePlot = GATE::Error::checkPath($self->{"software:GenePlot"});
 	my $plotas_cmd = qq(echo `date`; echo "run GenePlot"\n);
 	$plotas_cmd .= qq(cd $self->{"-workdir"}\n);
 	$plotas_cmd .= $self->runCuffcompare() if (!exists $self->{'compare-transcript-gtf'});
 	#print qq(genelist=$self->{"database:list"}\n);
-	my $genelist = checkPath($self->{"database:genelist"});
-	my $refGene = checkPath($self->{"database:$gene"});
+	my $genelist = GATE::Error::checkPath($self->{"database:genelist"});
+	my $refGene = GATE::Error::checkPath($self->{"database:$gene"});
 	
-	$plotas_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$plotas_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$plotas_cmd .= "cd as\n";
 	$plotas_cmd .= "mkdir AS_Figure\n" if (!-d qq($self->{"-workdir"}/as/AS_Fgiure/));
 	$plotas_cmd .= "cd AS_Figure\n";
@@ -3812,6 +3963,7 @@ sub runGenePlot ($) {
 	}
 }
 
+sub runScripture ($) {
 #
 #Parameters 
 # -alignment <Alignment file in BAM, SAM or Alignemnt format> 
@@ -3900,7 +4052,6 @@ sub runGenePlot ($) {
 # java -Xmx2000m -jar scripture.jar -task score <Mandatory parameters>
 
 #dot -Tps chr1.segments.bed.dot -o chr1.ps
-sub runScripture ($) {
 	my $self = shift;
 	my $ref = shift;
 	$ref ||= 'ref';
@@ -3909,30 +4060,30 @@ sub runScripture ($) {
 	}
 	my $scripture_cmd = $self->runTopHat('ref');
 	$scripture_cmd .= qq(echo `date`; echo "run Scripture"\n);
-	$scripture_cmd .= qq(export PATH="$self->{"CustomSetting:PATH"}":\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
-	my $reference=checkPath($self->{"database:$ref"});
+	$scripture_cmd .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	$scripture_cmd .= qq(export REFERENCE="$reference"\n);
-	my $heap = $self->{"CustomSetting:heap"};
+	my $heap = $self->{"setting:heap"};
 	$scripture_cmd .= qq(export heap="$heap"\n);
-	my $scripture = checkPath($self->{"software:scripture"}) if (exists $self->{"software:scripture"});
+	my $scripture = GATE::Error::checkPath($self->{"software:scripture"}) if (exists $self->{"software:scripture"});
 	$scripture=correctJavaCmd($scripture,$heap,"./tmp_scripture");
-	my $para = $self->{"CustomSetting:scripture"} if (exists $self->{"CustomSetting:scripture"});
+	my $para = $self->{"setting:scripture"} if (exists $self->{"setting:scripture"});
 	$scripture_cmd .= qq(export scripture="$scripture"\n);
 	$scripture_cmd .= qq(export para="$para"\n);
-	my $multi_t=$self->{"CustomSetting:multithreads"};
+	my $multi_t=$self->{"setting:multithreads"};
 	$scripture_cmd .= qq(export multithreads=$multi_t\n);
-	my $samtools = checkPath($self->{"software:samtools"});
+	my $samtools = GATE::Error::checkPath($self->{"software:samtools"});
 	$scripture_cmd .= qq(export samtools="$samtools"\n);
 	my $which=`which igvtools`;chomp $which;
-	my $igvtools=(-f $which && -e $which) ? $which : checkPath($self->{"software:igvtools"});
+	my $igvtools=(-f $which && -e $which) ? $which : GATE::Error::checkPath($self->{"software:igvtools"});
 	$scripture_cmd .= qq(export igvtools="$igvtools"\n);
 	my $dot=`which dot`;chomp $dot;
-	$dot=checkPath($self->{"software:dot"}) if (exists $self->{"software:dot"});
+	$dot=GATE::Error::checkPath($self->{"software:dot"}) if (exists $self->{"software:dot"});
 	$scripture_cmd .= qq(export dot="$dot"\n);
-	my $workdir=checkPath($self->{"-workdir"});
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$scripture_cmd .= qq(export workdir="$workdir"\n);
 	$scripture_cmd .= qq(cd \${workdir}\n);
-	my $scripture_outdir = (exists $self->{"CustomSetting:scripture_outdir"}) ? checkPath($self->{"CustomSetting:scripture_outdir"}) : "./scripture_out";
+	my $scripture_outdir = (exists $self->{"setting:scripture_outdir"}) ? GATE::Error::checkPath($self->{"setting:scripture_outdir"}) : "./scripture_out";
 	$scripture_cmd .= qq(export scripture_outdir="$scripture_outdir"\n);
 	$scripture_cmd .= qq([[ -d \${scripture_outdir} ]] || mkdir -p \${scripture_outdir}\n) if (!-d qq($self->{"-workdir"}/$scripture_outdir));
 	$scripture_cmd .= qq(cd \${scripture_outdir}\n);
@@ -3960,7 +4111,7 @@ sub runScripture ($) {
 			$scripture_cmd .= "\n";
 		}
 		else {
-			$scripture_cmd .= (exists $self->{"CustomSetting:multimode"}) ? " &\n " : "\n";
+			$scripture_cmd .= (exists $self->{"setting:multimode"}) ? " &\n " : "\n";
 		}
 		$scripture_cmd .= qq(cd ../\n);
 		$multi++;
@@ -3968,6 +4119,11 @@ sub runScripture ($) {
 	$scripture_cmd .= qq(cd ../\n);
 	return $scripture_cmd;
 }
+
+sub runSOAPsplic ($) {
+	
+}
+
 
 #########################################################
 #                                                       #
@@ -3983,14 +4139,14 @@ sub runMACS ($) {
 	if (!exists $self->{"software:macs"}) {
 		return "";
 	}
-	my $macs=checkPath($self->{"software:macs"});
-	my $para=(exists $self->{'CustomSetting:macs'}) ? $self->{'CustomSetting:macs'} : " --bw=180 --verbose=3 --diag  -B -S --nomodel --mfold 10,30";
+	my $macs=GATE::Error::checkPath($self->{"software:macs"});
+	my $para=(exists $self->{'setting:macs'}) ? $self->{'setting:macs'} : " --bw=180 --verbose=3 --diag  -B -S --nomodel --mfold 10,30";
 	my $macs_cmd = qq(echo `date`; echo "run MACS"\n);
-	$macs_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$macs_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$macs_cmd .= qq(export macs=$macs\n);
 	$macs_cmd .= qq(export para="$para"\n);
 	$macs_cmd .= qq(cd $self->{"-workdir"}\n);
-	my $macs_outdir = (exists $self->{"CustomSetting:macs_outdir"}) ? $self->{"CustomSetting:macs_outdir"} : "macs";
+	my $macs_outdir = (exists $self->{"setting:macs_outdir"}) ? $self->{"setting:macs_outdir"} : "macs";
 	$macs_cmd .= qq([[ -d $macs_outdir ]] || mkdir $macs_outdir\n);
 	$macs_cmd .= qq(cd $macs_outdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -4022,18 +4178,18 @@ sub runCisGenome ($) {
 #                                                       #
 #########################################################
 
+sub runGenomeThreader ($) {
 #gth -showintronmaxlen 6000 -gcmaxgapwidth 6000 -o MW_v2c.gth.xml -xmlout -maskpolyatails -paralogs \
 #-genomic ../../00.db/MW_v2c.fasta -cdna ../../00.db/cassava_cdna.fa \
 #-protein ../../00.db/Euphorbiaceae_protein_sequence.fasta > 1.log 2> 2.log
-sub runGenomeThreader ($) {
 	my $self=shift;
 	if (!exists $self->{"software:gth"} || !-e $self->{"software:gth"})
 	{
 		return "";
 	}
-	my $gth=checkPath($self->{"software:gth"});
+	my $gth=GATE::Error::checkPath($self->{"software:gth"});
 	my $gth_cmd = qq(echo `date`; echo "run GenomeThreader"\n);
-	$gth_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$gth_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$gth_cmd .= qq(export gth="$gth"\n);
 	my $denovo_genomics="";
 	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
@@ -4091,9 +4247,9 @@ sub runGeneMark ($) {
 	{
 		return "";
 	}
-	my $gm=checkPath($self->{"software:gm"});
+	my $gm=GATE::Error::checkPath($self->{"software:gm"});
 	my $gm_cmd = qq(echo `date`; echo "run GeneMark"\n);
-	$gm_cmd = qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$gm_cmd = qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$gm_cmd .= qq(export gm="$gm"\n);
 	my $denovo_genomics="";
 	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
@@ -4142,6 +4298,7 @@ sub runGenScan ($) {
 	
 }
 
+sub runPASA ($) {
 #PASA in the Context of a Complete Eukaryotic Annotation Pipeline
 #(A) ab initio gene finding using a selection of the following software tools: GeneMarkHMM, FGENESH, Augustus, and SNAP, GlimmerHMM.
 #(B) protein homology detection and intron resolution using the GeneWise software and the uniref90 non-redundant protein database.
@@ -4150,8 +4307,6 @@ sub runGenScan ($) {
 #(E) use of EVidenceModeler (EVM) to compute weighted consensus gene structure annotations based on the above (A, B, C, D)
 #(F) use of PASA to update the EVM consensus predictions, adding UTR annotations and models for alternatively spliced isoforms (leveraging D and E).
 #(G) limited manual refinement of genome annotations (F) using Argo or Apollo
-
-sub runPASA ($) {
 	my $self=shift;
 }
 
@@ -4186,6 +4341,10 @@ sub runSOAPfusion ($) {
 	my $self = shift;
 }
 
+sub runSOAPfuse ($) {
+	
+}
+
 sub runCRAC($) {
 	my $self = shift;
 	my $ref = shift;
@@ -4194,21 +4353,21 @@ sub runCRAC($) {
 		return "";
 	}
 	my $crac = $self->{"software:crac"};
-	my $cracpara = $self->{"CustomSetting:crac"};
+	my $cracpara = $self->{"setting:crac"};
 	$cracpara .= qq( -k 22 \n) if ($cracpara!~/\-k/);
-	my $reference=checkPath($self->{"database:$ref"});
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	my $crac_cmd = qq(echo `date`; echo "run CRAC"\n);;
-	$crac_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$crac_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$crac_cmd .= qq(export REFERENCE="$reference"\n);
 	$crac_cmd .= qq(export crac=$crac\n);
 	$crac_cmd .= qq(export seecerpara="$cracpara"\n);
-	$crac_cmd .= qq(export qc_outdir=$self->{"CustomSetting:qc_outdir"}\n);
+	$crac_cmd .= qq(export qc_outdir=$self->{"setting:qc_outdir"}\n);
 	$crac_cmd .= qq(cd $self->{"-workdir"}\n);
-	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}));
-	$crac_cmd .= qq(cd $self->{"CustomSetting:qc_outdir"}\n);
+	$crac_cmd .= qq([[ -d \${qc_outdir} || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$crac_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
-		$crac_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"CustomSetting:qc_outdir"}/$lib));
+		$crac_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$crac_cmd .= "cd $lib\n";
 		my %fq=getlibSeq($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
@@ -4219,7 +4378,7 @@ sub runCRAC($) {
 				my $chimera=(@{$fq{2}}>1)?"$lib.pair.".($i+1).".chimera":"$lib.pair.chimera";
 				$crac_cmd .= qq(\${crac} \${cracpara} -i \$REFERENCE -r $fq1 $fq2 -o $bam );
 				$crac_cmd .= qq( --paired-end-chimera $chimera ) if ($cracpara=~/chimera/);
-				$crac_cmd .= qq(--nb-threads $self->{'CustomSetting:multithreads'}) if (exists $self->{'CustomSetting:multithreads'});
+				$crac_cmd .= qq(--nb-threads $self->{'setting:multithreads'}) if (exists $self->{'setting:multithreads'});
 				$crac_cmd .= qq(\n);
 			}
 		}
@@ -4259,19 +4418,19 @@ sub runCirCOS ($) {
 sub runClustalW2($) {
 	my $self=shift;
 	my $which=`which clustalw2`;chomp $which;
-	my $clustalw2=(-f $which && -e $which) ? $which : checkPath($self->{"software:clustalw2"});
+	my $clustalw2=(-f $which && -e $which) ? $which : GATE::Error::checkPath($self->{"software:clustalw2"});
 	if (!defined $clustalw2)
 	{
 		return "";
 	}
 #clustalw2 -INFILE=chloroplast.ext -ALIGN -TREE -PIM -TYPE=DNA -OUTPUT=NEXUS -STATS=chloroplast_stats.log > chloroplast.log 2>&1 &
 	my $clustalw2_cmd=qq(echo `date`; echo "run ClustalW2"\n);;
-	$clustalw2_cmd.= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$clustalw2_cmd.= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$clustalw2_cmd.=qq(export clustalw2=$clustalw2\n);
-	my $para=(exists $self->{"CustomSetting:clustalw2"})?$self->{"CustomSetting:clustalw2"}:"-ALIGN -TREE -PIM -TYPE=DNA -OUTPUT=NEXUS -STATS=stats.log";
+	my $para=(exists $self->{"setting:clustalw2"})?$self->{"setting:clustalw2"}:"-ALIGN -TREE -PIM -TYPE=DNA -OUTPUT=NEXUS -STATS=stats.log";
 	$clustalw2_cmd.=qq(export clustalw2_para=$para\n);
-	my $phylogen_outdir = (exists $self->{"CustomSetting:phylogen_outdir"}) ? $self->{"CustomSetting:phylogen_outdir"} : "phylogen";
-	my $workdir=checkPath($self->{"-workdir"});
+	my $phylogen_outdir = (exists $self->{"setting:phylogen_outdir"}) ? $self->{"setting:phylogen_outdir"} : "phylogen";
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$clustalw2_cmd.=qq(export workdir=$workdir\n);
 	$clustalw2_cmd.=qq(export phylgen_outdir=$phylogen_outdir\n);
 	$clustalw2_cmd.=qq(cd \${wordir}\n);
@@ -4279,7 +4438,7 @@ sub runClustalW2($) {
 	$clustalw2_cmd.=qq(cd \${phylgen_outdir}\n);
 	if (exists $self->{clustalw2_INFILE})
 	{
-		my $infile=checkPath($self->{clustalw2_INFILE});
+		my $infile=GATE::Error::checkPath($self->{clustalw2_INFILE});
 		$clustalw2_cmd.=qq(\${clustalw2} \${clustalw2_para} -INFILE=$infile\n);
 		my $prefix=$1 if ($infile=~/([^\/\s]\S+)\.[^\.\s]+$/);
 		$self->{"NEXUS"}="$workdir/$phylogen_outdir/$prefix.nxs";
@@ -4313,17 +4472,17 @@ sub runMrBayes
 {
 	my $self=shift;
 	my $which = `which mb`;chomp $which;
-	my $mb = (-f $which && -e $which) ? $which : checkPath($self->{"software:mb"});
+	my $mb = (-f $which && -e $which) ? $which : GATE::Error::checkPath($self->{"software:mb"});
 	if (!defined $mb) {
 		return "";
 	}
 	my $mb_cmd=qq(echo `date`; echo "run MrBayes"\n);
-	$mb_cmd .= qq(export PATH=$self->{"CustomSetting:PATH"}:\$PATH\n) if (exists $self->{"CustomSetting:PATH"} && $self->{"CustomSetting:PATH"}!~/\/usr\/local\/bin/);
+	$mb_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$mb_cmd.=qq(export mb=$mb\n);
-	my $conf=(exists $self->{"CustomSetting:mb"})?$self->{"CustomSetting:mb"}:"\tlset nst=6 rates=invgamma;\n\tmcmc ngen=20000000;\n\tsump relburnin=yes burninfrac=0.25;\n\tsumt relburnin=yes burninfrac=0.25;\n";
+	my $conf=(exists $self->{"setting:mb"})?$self->{"setting:mb"}:"\tlset nst=6 rates=invgamma;\n\tmcmc ngen=20000000;\n\tsump relburnin=yes burninfrac=0.25;\n\tsumt relburnin=yes burninfrac=0.25;\n";
 	$mb_cmd.=qq(export mb_conf=$conf\n);
-	my $phylogen_outdir = (exists $self->{"CustomSetting:phylogen_outdir"}) ? $self->{"CustomSetting:phylogen_outdir"} : "phylogen";
-	my $workdir=checkPath($self->{"-workdir"});
+	my $phylogen_outdir = (exists $self->{"setting:phylogen_outdir"}) ? $self->{"setting:phylogen_outdir"} : "phylogen";
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$mb_cmd.=qq(export workdir=$workdir\n);
 	$mb_cmd.=qq(export phylgen_outdir=$phylogen_outdir\n);
 	$mb_cmd.=qq(cd \${wordir}\n);
@@ -4353,227 +4512,6 @@ sub runMrBayes
 #cluster -f tabfile -l -cg m -ca a -na -e 7
 sub runCluster ($) {
 	
-}
-
-sub getlibSeq ($) {
-	my $lib=shift;
-	my %Seq=();
-	for my $i(sort keys %$lib) {
-		if (exists $lib->{$i}) {
-			my ($A,$B)=($1,$2) if ($i=~/(\w+)([12])/);
-			foreach my $reads(@{$lib->{$i}}) {
-				if (defined $A && defined $B) {
-					my $C=($B==1)?2:1;
-					if (exists $lib->{"$A$C"}) {
-						push @{$Seq{$B}},$reads;
-					} else {
-						push @{$Seq{0}},$reads;
-					}
-				} else {
-					push @{$Seq{0}},$reads;
-				}
-			}
-		}
-	}
-	return %Seq;
-}
-
-sub checkIndex($$) {
-	my ($soft,$db)=@_;
-	if ($soft eq 'bwa') {
-		my @refidx = glob("$db.*");
-		if (@refidx<5 || !-f "$db.bwt" || !-f $db) {
-			print STDERR get_time()."\t\tno bwa index for $db\n";
-			return 0;
-		} else {
-			return 1;
-		}
-	} elsif ($soft eq 'bowtie') {
-		my @refidx=glob("$db.*.ebwt");
-		if (@refidx<6 || !-f $db) {
-			print STDERR get_time()."\t\tno bowtie index for $db\n";
-			return 0;
-		} else {
-			return 1;
-		}
-	} elsif ($soft eq 'bowtie2') {
-		$db=~s/\.fasta//;
-		$db=~s/\.fa//;
-		my @refidx=glob("$db.*.bt2");
-		if (@refidx<6) {
-			print STDERR get_time()."\t\tno bowtie2 index for $db\n";
-			return 0;
-		} else {
-			return 1;
-		}
-	} elsif ($soft eq "samtools") {
-		if ($db=~/fa/i && !-f "$db.fai") {
-			print STDERR get_time()."\t\tno samtools index for $db\n";
-			return 0;
-		} elsif ($db =~ /bam$/ && !-f "$db.bai") {
-			print STDERR get_time()."\t\tno bwa index for $db\n";
-			return 0;
-		} else {
-			return 1;
-		}
-	} elsif ($soft eq "picard") {
-		my $prefix=$1 if ($db=~/(\S+)\.fa/);
-		if ($db=~/fa/i && !-f "$db.dict" && !-f "$prefix.dict") {
-			print STDERR get_time()."\t\tno picard index for $db\n";
-			return 0;
-		} else {
-			return 1;
-		}
-	} elsif ($soft eq "maq") {
-		my $prefix= $1 if ($db=~/(\S+)\.fa/);
-		if ($db=~/fa/i && !-f "$db.bfa" && !-f "$prefix.bfa") {
-			print STDERR get_time()."\t\tno maq index for $db\n";
-			return 0;
-		} else {
-			return 1;
-		}
-	} elsif ($soft eq "soap") {
-		my @index=glob("$db.index*");
-		if (@index>0) {
-			return 1;
-		} else {
-			return 0;
-		}
-	} elsif ($soft eq "blast" || $soft eq "formatdb") {
-		
-	}
-}
-
-sub correctJavaCmd
-{
-	my ($tools,$heap,$Djavaio)=@_;
-	my $cmd="java";
-	my $init="40m";
-	if (defined $tools && $tools !~ /^java/ && $tools !~ /\-jar/)
-	{
-		if (defined $heap)
-		{
-			if ($heap=~/(\d+)(\w+)/) {
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10)."$unit";
-			} elsif ($heap=~/(\d+)$/) {
-				$heap.="m";
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10).$unit;
-			}
-			$init="40m" if ($init =~ /^0/);
-			$cmd.=" -Xms$init -Xmx$heap";
-		}
-		if (defined $Djavaio)
-		{
-			$cmd.=" -Djava.io.tmpdir=$Djavaio";
-		}
-		$cmd.=" -jar $tools";
-	}
-	else
-	{
-		$cmd=$tools;
-		if (defined $heap && $cmd !~ /\-Xmx/)
-		{
-			if ($heap=~/(\d+)(\w+)/) {
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10)."unit";
-			} elsif ($heap=~/(\d+)$/) {
-				$heap.="m";
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10).$unit;
-			}
-			$init="40m" if ($init =~ /^0/);
-			$cmd=~s/java/java\ -Xms$init \-Xmx$heap\ /;
-		}
-		if (defined $Djavaio && $cmd !~ /\-Djava/)
-		{
-			$cmd=~s/\-jar/\-Djava\.io\.tmpdir\=$Djavaio\ \-jar/;
-		}
-	}
-	return $cmd;
-}
-
-sub check_fileformat ($) {
-	my $file=shift;
-	if (-B $file) {
-		if ($file=~/bam$/i)
-		{
-			my $index=checkIndex('samtools',$file);
-			if ($index==1)
-			{
-				return "bam";
-			}
-		} elsif ($file=~/fasta.gz$/i || $file=~/fa.gz$/i) {
-			return "fasta.gz";
-		} elsif ($file=~/fastq.gz$/i || $file=~/fq.gz$/i) {
-			return "fastq.gz";
-		} elsif ($file=~/gz$/i) {
-			open (IN,"zcat $file|");
-			my $line=<IN>;
-			if ($line=~/^\>/) {
-				return "fasta.gz";
-			} elsif ($line=~/^\@/) {
-				return "fastq.gz";
-			}
-			close IN;
-		} elsif ($file=~/sff/i) {
-			return "sff";
-		} elsif ($file=~/bfa/i) {
-			return "bfa";
-		} elsif ($file=~/bfq/i) {
-			return "bfq";
-		}
-	} elsif (-T $file) {
-		if ($file=~/sam/i) {
-			return "sam";
-		} elsif ($file=~/fasta$/i || $file=~/fa$/i || $file=~/seq/i || $file=~/fna/i || $file=~/fas/i) {
-			return "fasta";
-		} elsif ($file=~/fastq$/i || $file=~/fq/i) {
-			return "fastq";
-		} else {
-			open (IN,$file);
-			my $line=<IN>;
-			if ($line=~/^\>/) {
-				return "fasta";
-			} elsif ($line=~/^\@/) {
-				return "fastq";
-			}
-			close IN;
-		}
-	}
-}
-
-sub print_check_process {
-	my @ary=@_;
-	my $out="";
-	my $process = join " ",@ary;
-	my $grep="";
-	foreach my $p (@ary) {
-		$grep .= " \| grep $p";
-	}
-	$out .= qq(user=`whoami`\np=\`ps -u \$user -f $grep | grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$process is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps -u \$user -f $grep | grep -v grep\`\ndone\n);
-	return $out;
-}
-
-sub get_time ($) {
-	my $self=shift;
-	my  ($sec,$min,$hour,$mday,$mon,$year) = (localtime)[0..5];
-	($sec,$min,$hour,$mday,$mon,$year) = (
-		sprintf("%02d", $sec),
-		sprintf("%02d", $min),
-		sprintf("%02d", $hour),
-		sprintf("%02d", $mday),
-		sprintf("%02d", $mon + 1),
-		$year + 1900
-	);
-	$self->{year}=$year;
-	$self->{month}=$mon;
-	$self->{day}=$mday;
-	$self->{hour}=$hour;
-	$self->{minute}=$min;
-	$self->{second}=$sec;
-	return "## $year-$mon-$mday $hour:$min:$sec\n";
 }
 
 1;

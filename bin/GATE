@@ -165,7 +165,7 @@ AlternativeSplicing=./bin/AlternativeSplicing.jar
 SamToFastq=./bin/SamToFastq.jar
 GenePlot=/home/bio/pub/GATE/bin/GenePlot.pl
 
-[CustomSetting]
+[setting]
 PATH=/home/bio/pub/GATE/bin/:/home/bio/bin/
 RSeQCPATH=/usr/local/bin/
 PYTHONPATH=/usr/local/lib/python2.7/site-packages
@@ -304,7 +304,7 @@ foreach my $cmd(@cmd_ary){
 			my $worksh="$cmd\.$$.sh";
 			open (OUT,">$worksh") || die $!;
 			if (defined $Auto) {
-				print OUT $gate->{"CustomSetting:PBS-header"};
+				print OUT $gate->{"setting:PBS-header"};
 			}
 			print OUT $gate->aln;
 			print STDERR "make job submitted shell script for $cmd\n";
@@ -314,7 +314,7 @@ foreach my $cmd(@cmd_ary){
 			$allwork.=qq(p=\`ps aux|grep $worksh|grep -v grep\`\nwhile [ "\$p" != "" ]\ndo\n\techo "$worksh is not finish yet! sleep 120s"\n\tsleep 120\n\tp=\`ps aux|grep $worksh|grep -v grep\`\ndone\n);
 			$allwork.=qq(echo \`date\`\necho "$worksh done"\n);
 			#if (defined $Auto) {
-			#	my $qsub_para=$gate->{"CustomSetting:qsub"};
+			#	my $qsub_para=$gate->{"setting:qsub"};
 			#	system "qsub $qsub_para ./$worksh";
 			#}
 			next;
@@ -325,7 +325,7 @@ foreach my $cmd(@cmd_ary){
 			my $worksh="$cmd\.$$.sh";
 			open (OUT,">$worksh") || die $!;
 			if (defined $Auto) {
-				print OUT $gate->{"CustomSetting:PBS-header"};
+				print OUT $gate->{"setting:PBS-header"};
 			}
 			print OUT $gate->exp;
 			print STDERR "make job submitted shell script for $cmd\n";
@@ -338,7 +338,7 @@ foreach my $cmd(@cmd_ary){
 		my $worksh="$cmd\.$$.sh";
 		open (OUT,">$worksh") || die $!;
 		if (defined $Auto) {
-			print OUT $gate->{"CustomSetting:PBS-header"};
+			print OUT $gate->{"setting:PBS-header"};
 		}
 		print OUT $gate->$cmd;
 		close OUT;
@@ -362,7 +362,7 @@ print PO $allwork;
 print PO qq(echo "End"\n);
 close PO;
 if (defined $Auto) {
-	my $qsub_para=$gate->{"CustomSetting:qsub"};
+	my $qsub_para=$gate->{"setting:qsub"};
 	system "qsub $qsub_para ./$pipeline";
 }
 
