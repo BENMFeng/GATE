@@ -74,7 +74,7 @@ Version: v0.1.7 nightly, May 6th, 2013
     peak		find peak for ChIP-Seq
     *edit		gene editing analysis
     fusion		gene fusion analysis
-    *ncrna		non-coding RNA analysis
+    ncrna		non-coding RNA analysis
     *anno		annotation
     *repeat		repeat finding
     phylogen		phylogenetics analysis

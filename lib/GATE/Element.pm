@@ -85,7 +85,7 @@ sub exp($) {
 
 sub diff($) {
 	my $self=shift;
-	$self->runCuffdiff('ref','merged-gtf');
+	$self->runCuffdiff('ref','refGene');
 }
 
 sub as($) {
@@ -106,6 +106,11 @@ sub plot($) {
 sub denovo($) {
 	my $self=shift;
 	$self->runScripture().$self->runTrinity().$self->runVelvetOases().$self->runSOAPdenovo();
+}
+
+sub ncrna($) {
+	my $self=shift;
+	$self->runtRNAScan();
 }
 
 sub abinito($) {

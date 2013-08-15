@@ -151,8 +151,6 @@ sub getlibSeq ($) {
 	return %Seq;
 }
 
-
-
 sub correctJavaCmd
 {
 	my ($tools,$heap,$Djavaio)=@_;
@@ -2487,7 +2485,7 @@ sub runTopHat($$) {
 			my $LB=(exists $self->{$lib}{'fq1'}{0}{'LB'})?$self->{$lib}{'fq1'}{0}{'LB'}:$lib;
 			my $PL=(exists $self->{$lib}{'fq1'}{0}{'PL'})?$self->{$lib}{'fq1'}{0}{'PL'}:"ILLUMINA";
 			my $PU=$self->{$lib}{'fq1'}{0}{'PU'} if (exists $self->{$lib}{'fq1'}{0}{'PU'});
-			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
+			my $rg="--rg-id $ID --rg-platform $PL --rg-library $LB --rg-sample $SM";
 			$rg.=" --rg-platform-unit $PU" if (defined $PU);
 			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_pe\_tophat \$REFERENCE $fq1 $fq2\n";
 			$tophat_cmd .= "\${samtools} index $lib\_pe\_tophat/accepted_hits.bam\n";
@@ -2501,7 +2499,7 @@ sub runTopHat($$) {
 			my $LB=(exists $self->{$lib}{'fq'}{0}{'LB'})?$self->{$lib}{'fq'}{0}{'LB'}:$lib;
 			my $PL=(exists $self->{$lib}{'fq'}{0}{'PL'})?$self->{$lib}{'fq'}{0}{'PL'}:"ILLUMINA";
 			my $PU=$self->{$lib}{'fq'}{0}{'PU'} if (exists $self->{$lib}{'fq'}{0}{'PU'});
-			my $rg="--rg-id $ID--rg-platform $PL --rg-library$LB --rg-sample $SM";
+			my $rg="--rg-id $ID --rg-platform $PL --rg-library $LB --rg-sample $SM";
 			$rg.=" --rg-platform-unit $PU" if (defined $PU);
 			$tophat_cmd .= "\${tophat} \${tophatpara} $rg -o $lib\_se\_tophat \$REFERENCE $fq1\n";
 			$tophat_cmd .= "\${samtools} index $lib\_se\_tophat/accepted_hits.bam\n";
@@ -4321,6 +4319,48 @@ sub runEVM ($) {
 #########################################################
 sub runtRNAScan ($) {
 	my $self=shift;
+	my $tRNAscanSE=GATE::Error::checkPath($self->{"software:tRNAscan-SE"});
+	if (!defined $tRNAscanSE || $tRNAscanSE eq "") {
+		return "";
+	}
+	my $tRNA_cmd = qq(echo `date`; echo "run tRNAscan-SE"\n);
+	$tRNA_cmd = qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$tRNA_cmd .= qq(export tRNAscanSE="$tRNAscanSE"\n);
+	my $tRNApara=$self->{"setting:tRNAscan-SE"};
+	$tRNA_cmd .= qq(export tRNApara="$tRNApara"\n);
+	my $denovo_genomics="";
+	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
+	$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
+	if (!defined $denovo_genomics) {
+		$gm_cmd .= $self->runTrinity();
+		$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
+	}
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $k=0;
+	foreach my $lib(@libraries) {
+		$tRNA_cmd .= qq(echo `date`; echo "$lib"\n);
+		$tRNA_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
+		$tRNA_cmd .= qq(cd $lib\n);
+		if (exists $self->{"LIB"}{$lib}{'INPUT'}{'denovo'}) {
+			$denovo_genomics = $self->{"LIB"}{$lib}{'INPUT'}{'denovo'};
+		}
+		elsif (exists $self->{"LIB"}{"$lib"}{'denovo'}) {
+			$denovo_genomics = ${$self->{"LIB"}{$lib}{'denovo'}}[0];
+		}
+		elsif (exists $self->{"LIB"}{"$lib"}{'fa'}) {
+			$denovo_genomics = ${$self->{"LIB"}{$lib}{'fa'}}[0];
+		} else {
+			$k++;
+			next;
+		}
+		$tRNA_cmd .= qq(\{tRNAscanSE} \${tRNApara} -o $denovo_genomics\.tRNA -f $denovo_genomics\.structure $denovo_genomics\n);
+	}
+	if ($k==@libraries) {
+		$tRNA_cmd .= qq(\{tRNAscanSE} \${tRNApara} -o $denovo_genomics\.tRNA -f $denovo_genomics\.structure $denovo_genomics\n);
+	}
+	if (defined $denovo_genomics) {
+		return $tRNA_cmd;
+	}
 }
 
 sub runInferal ($) {
@@ -4342,7 +4382,7 @@ sub runSOAPfusion ($) {
 }
 
 sub runSOAPfuse ($) {
-	
+	my $self = shift;
 }
 
 sub runCRAC($) {
@@ -4508,10 +4548,8 @@ sub runMrBayes
 	return $mb_cmd;
 }
 
-
-#cluster -f tabfile -l -cg m -ca a -na -e 7
 sub runCluster ($) {
-	
+#cluster -f tabfile -l -cg m -ca a -na -e 7	
 }
 
 1;

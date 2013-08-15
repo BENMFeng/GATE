@@ -14,12 +14,14 @@ GetOptions(\%opts,"path:s"=>\$path,"clone:s"=>\$clone,"pattern:s"=>\$pattern,"sm
 die qq(perl $0 <-path input_data_dir> [-clone example_config] [-pattern "_R1_:_R2_"] [-sm sample_list.txt] [-index index.list] [-barcode C]\n) if (!defined $path || $Help);
 
 $path=~s/\/$//;
+$pattern ||= "_R1_:_R2_";
 my ($R1,$R2)=split /[\:\-]/,$pattern;
 my @SM=parselist($sm) if (defined $sm);
 my @Index=parselist($index) if (defined $index);
 my @Barcode=parselist($barcode) if (defined $barcode);
 
 my @filenames;
+my %get_file;
 &recur_read_dir ($path, \@filenames);
 my $prelb="";
 my $sm_n=0;
@@ -45,7 +47,7 @@ if (defined $clone && -f $clone) {
 
 foreach my $myfile(@filenames)
 {
-	if ($myfile=~/$R1/ && -f $myfile && ($myfile=~/fastq$/i || $myfile=~/fq$/i || $myfile=~/gz/i) )
+	if ($myfile=~/$R1/ && -f $myfile && ($myfile=~/fastq$/i || $myfile=~/fq$/i || $myfile=~/gz$/i) )
 	{
 		my $otherfile=$myfile;
 		$otherfile=~s/$R1/$R2/;
@@ -101,20 +103,23 @@ sub parselist {
 sub recur_read_dir {
 	my ($path, $r_filename_list) =@_;
 	my $h_dir;
-	foreach my $cur_path(glob("$path*"))
+	my @all_path=sort glob("$path*");
+	foreach my $cur_path(@all_path)
 	{
 		opendir($h_dir, $cur_path) or die "serious dainbramage: $!";
 		my @allfiles = grep { not /^\.{1,2}\z/ } readdir $h_dir;
 		my $filename;
-		for(my $i =1; $i<=@allfiles; $i++ ) {
-			$filename =$allfiles[$i -1];
-			my $absolute_name_ =get_absolute_name($cur_path, $filename);
-			if( -d $absolute_name_ ) {
-				&recur_read_dir($absolute_name_, $r_filename_list);
-				push(@$r_filename_list, $absolute_name_);
+		for(my $i =0; $i< @allfiles; $i++ ) {
+			$filename = $allfiles[$i];
+			my $absolute_name = get_absolute_name($cur_path, $filename);
+			if( -d $absolute_name ) {
+				&recur_read_dir($absolute_name, $r_filename_list);
+				push(@$r_filename_list, $absolute_name) if (!exists $get_file{$absolute_name});
+				$get_file{$absolute_name}=1;
 			}
 			else {
-				push(@$r_filename_list, $absolute_name_);
+				push(@$r_filename_list, $absolute_name) if (!exists $get_file{$absolute_name});
+				$get_file{$absolute_name}=1;
 			}
 		}
 		closedir $h_dir;
