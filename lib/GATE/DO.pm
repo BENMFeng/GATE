@@ -650,7 +650,7 @@ sub mergeOverlapPE($) {
 			}
 			for (my $i=0;$i<@Reads1;$i++)
 			{
-				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
+				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && GATE::Error::boolean($self->{$lib}{'fq1'}{$i}{"MergePE"})==1 ) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara\n";
 					$mop_cmd_multi .= "$mergeOverlapPE $Reads1[$i] $Reads2[$i] -prefix $prefix $moppara && ";
@@ -739,7 +739,7 @@ sub mergeOverlapPE($) {
 			}
 			for (my $i=0;$i<@Reads1;$i++)
 			{
-				if (exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && ($self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /TRUE/i || $self->{$lib}{'fq1'}{$i}{"MergePE"} =~ /Yes/i)) {
+				if ( exists $self->{$lib}{'fq1'}{$i}{"MergePE"} && GATE::Error::boolean($self->{$lib}{'fq1'}{$i}{"MergePE"})==1 ) {
 					my $prefix=(@Reads1>1)?"$lib-".($i+1):$lib;
 					$mop_cmd .= "$bwapemerge $moppara -m $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq\n";
 					$mop_cmd_multi .= qq($bwapemerge $moppara -m -t $self->{"setting:multithreads"} $Reads1[$i] $Reads2[$i] > $prefix\_merged.fastq && );
@@ -1184,12 +1184,12 @@ sub runFltAP ($) {
 						$single1=~s/fastq$/single.fastq/i;
 						$single2=~s/fastq$/single.fastq/i;
 						$fltap_cmd .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2\n";
-						$fltap_cmd .= "rm $reads1 $reads2\n" if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+						$fltap_cmd .= "rm $reads1 $reads2\n" if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 						$fltap_cmd_multi .= "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
-						$fltap_cmd_multi .= "rm $reads1 $reads2 && " if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+						$fltap_cmd_multi .= "rm $reads1 $reads2 && " if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 						if (defined $multirun) {
 							print FLA "$fltfastq2pe -fastq1 $reads1 -fastq2 $reads2 $filter1 $filter2 && ";
-							print FLA "rm $reads1 $reads2 && " if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+							print FLA "rm $reads1 $reads2 && " if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 						}
 						${$self->{"LIB"}{$lib}{"$lb$i"}}[$p]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$pair1";
 						${$self->{"LIB"}{$lib}{"$lb$j"}}[$p]=$self->{"-workdir"}."/".$self->{"setting:qc_outdir"}."/$lib/$pair2";
@@ -1249,10 +1249,10 @@ sub runFltAP ($) {
 				}
 			}
 		}
-		$fltap_cmd .= "rm *.out\n" if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
-		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+		$fltap_cmd .= "rm *.out\n" if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
+		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 		if (defined $multirun) {
-			print FLA "rm *.out && " if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+			print FLA "rm *.out && " if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 			print FLA "cd ..\n";
 		}
 		$fltap_cmd .= qq(rm align.mat\n) unless (!defined $align_matrix || -f "align.mat");
@@ -1913,7 +1913,7 @@ sub runBWA($$) {
 					$bam=$fxmtbam;
 				}
 				push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$bam";
-				$bwa_cmd .= "rm *.sai *.pair.bam\n" if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+				$bwa_cmd .= "rm *.sai *.pair.bam\n" if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 			}
 		}
 		if (exists $fq{0} && @{$fq{0}}>0){
@@ -2018,12 +2018,16 @@ sub runBWA($$) {
 			my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
 			my $merge_bam=join " INPUT=",@{$self->{$lib}{"ref-bwabam"}};
 			$bwa_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
+			my $bam="$lib.merge.bam";
 			$bwa_cmd .= "\${samtools} index $lib.merge.bam\n";
-			$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
-			$bwa_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-			$bwa_cmd .= "rm -rf ./tmp_merge $lib.merge.bam*\n" if (exists $self->{"rule:Clean"});
+			if (!exists $self->{rmdup} || GATE::Error::boolean($self->{rmdup})==1) {
+				$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
+				$bam="$lib.merge.rmdup.sort.bam";
+				$bwa_cmd .= "\${samtools} index $bam\n";
+			}
+			$bwa_cmd .= "rm -rf ./tmp_merge\n" if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1);
 			@{$self->{$lib}{"$ref-bwabam"}}=();
-			my $bam=$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.merge.rmdup.sort.bam";
+			$bam=$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$bam";
 			push @{$self->{$lib}{"$ref-bwabam"}},$bam;
 			if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 				$bwa_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
@@ -2071,7 +2075,7 @@ sub runBWA($$) {
 	}
 	$bwa_cmd.="cd ..\n";
 	if ($skip<@libraries) {
-		return $bwa_cmd;
+		return $bwa_cmd unless (exists $self->{'rule:skipaln'} && GATE::Error::boolean($self->{'rule:skipaln'})==1);
 	} else {
 		return "";
 	}
@@ -2184,14 +2188,20 @@ sub runBowtie($$) {
 				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
 				my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
+				my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 				my $merge_bam=join " INPUT=",@bam;
 				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
 				$bowtie_cmd .= "\${samtools} index $lib.merge.bam\n";
-				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
-				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"rule:Clean"});
+				my $bowtiebam="$lib.merge.bam";
+				if (!exists $self->{'rule:rmdup'} || GATE::Error::boolean($self->{'rule:rmdup'}==1)) {
+					$bowtie_cmd .=  qq($MarkDuplicates INPUT=$bowtiebam OUTPUT=$lib.merge.rmdup.bam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
+					$bowtie_cmd .= "\${samtools} sort $lib.merge.rmdup.bam $lib.merge.rmdup.sort\n";
+					$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
+					$bowtiebam = "$lib.merge.rmdup.sort.bam";
+				}
+				$bowtie_cmd .= "rm -rf ./tmp_merge\n" if (exists $self->{"rule:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
-				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$lib.merge.rmdup.sort.bam";
+				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$bowtiebam";
 			} else {
 				my $merge_bam=join " ",@bam;
 				$bowtie_cmd .= qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam\n);
@@ -2201,11 +2211,15 @@ sub runBowtie($$) {
 				}
 				$bowtie_cmd .=  qq(\${samtools} view -H $bam[0] |grep PG >> $lib.inh.sam\n);
 				$bowtie_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam\n";
-				$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort -@ 8 -m 1G - $lib.merge.rmdup.sort\n";
-				$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
-				$bowtie_cmd .= "rm -rf ./tmp_merge $lib.merge.bam\n" if (exists $self->{"rule:Clean"});
+				my $bowtiebam="$lib.merge.bam";
+				if (!exists $self->{'rule:rmdup'} || GATE::Error::boolean($self->{'rule:rmdup'}==1)) {
+					$bowtie_cmd .= "\${samtools} rmdup $lib.merge.bam - |\${samtools} rmdup -S - - | \${samtools} sort -@ 8 -m 1G - $lib.merge.rmdup.sort\n";
+					$bowtie_cmd .= "\${samtools} index $lib.merge.rmdup.sort.bam\n";
+					$bowtiebam = "$lib.merge.rmdup.sort.bam";
+				}
+				$bowtie_cmd .= "rm -rf ./tmp_merge\n" if (exists $self->{"rule:Clean"});
 				@{$self->{$lib}{"$ref-bowtiebam"}}=();
-				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$lib.merge.rmdup.sort.bam";
+				push @{$self->{$lib}{"$ref-bowtiebam"}},"$workdir/$alndir/$lib/$bowtiebam";
 			}
 		}
 		else
@@ -2214,7 +2228,7 @@ sub runBowtie($$) {
 		}
 	}
 	$bowtie_cmd .= "cd ..\n";
-	return ($bowtie_cmd);
+	return ($bowtie_cmd) unless (exists $self->{'rule:skipaln'} && GATE::Error::boolean($self->{'rule:skipaln'})==1);
 }
 
 ## SOAPaligner v2.21
@@ -2387,7 +2401,7 @@ sub runSOAP ($$) {
 						my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 						$merge_bam=join " INPUT\=",@bam;
 						$soap_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam\n";
-						if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) )
+						if (exists $self->{"rule:Clean"} && (GATE::Error::boolean($self->{"rule:Clean"})==1 )
 						{
 							$soap_cmd .= qq(rm -rf ./tmp_merge);
 							$soap_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
@@ -2693,7 +2707,7 @@ sub runGATK ($$) {
 					$merge_bam=join " INPUT\=",@{$self->{$lib}{"ref-bwabam"}};
 					$gatk_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
 					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-					if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) )
+					if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 					{
 						$gatk_cmd .= qq(rm -rf ./tmp_merge);
 						$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
@@ -2752,30 +2766,32 @@ sub runGATK ($$) {
 #  M\=$PWDS/${subjectID}.duplicate_report.txt \
 #  VALIDATION_STRINGENCY\=SILENT \
 #  REMOVE_DUPLICATES\=true
-		if (defined $MarkDuplicates && $MarkDuplicates ne "") {
-			#$gatk_cmd .= qq(mkdir -p ./tmp_rmdup);
-			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-			#$gatk_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
-			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-			my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
-			my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
-			$gatk_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-			$gatk_cmd .= qq(\${samtools} index $rmdupbam);
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-			$bam=$rmdupbam;
-			if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) )
-			{
-				$gatk_cmd .= qq(rm -rf ./tmp_rmdup);
+		if (!exists $self->{'rule:rmdup'} || GATE::Error::boolean($self->{'rule:rmdup'})==1) {
+			if (defined $MarkDuplicates && $MarkDuplicates ne "") {
+				#$gatk_cmd .= qq(mkdir -p ./tmp_rmdup);
+				#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				#$gatk_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
+				#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
+				my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
+				$gatk_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
 				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= qq(\${samtools} index $rmdupbam);
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$bam=$rmdupbam;
+				if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
+				{
+					$gatk_cmd .= qq(rm -rf ./tmp_rmdup);
+					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				}
+			}else{
+				my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
+				$gatk_cmd .= "\${samtools} rmdup $bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= "\${samtools} index $rmdupbam.bam";
+				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$bam="$rmdupbam.bam";
 			}
-		}else{
-			my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
-			$gatk_cmd .= "\${samtools} rmdup $bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-			$gatk_cmd .= "\${samtools} index $rmdupbam.bam";
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
-			$bam="$rmdupbam.bam";
 		}
 ## Stat
 #${bamtools} stats \
@@ -2997,7 +3013,7 @@ sub runGATK ($$) {
 			#$bam=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
 			$self->{$lib}{"$ref-vcf"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$lib.gatk.var.vcf";
-			if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) )
+			if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 			{
 				$gatk_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
 				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
@@ -3068,7 +3084,7 @@ sub runDindel ($) {
 			$dindel_cmd .= qq(push \@cmdary,qq\(\"$dindel --analysis indels --doDiploid --bamFile $bam --ref $reference --varFile \$f[\$i] --libFile $lib.dindel_output.libraries.txt --outputFile \$prefix\"\);}my \$cmd="$multirun ".join " ",\@cmdary;system \$cmd}\'\n);
 			$dindel_cmd .= qq(ls $lib.dindel_stage2_output_windows.*.glf.txt > $lib.dindel_stage2_outputfiles.txt\n);
 			$dindel_cmd .= qq(mergeOutputDiploid.py --inputFiles $lib.dindel_stage2_outputfiles.txt --outputFile $lib.variantCalls.VCF --ref \${REFERENCE}\n);
-			$dindel_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"rule:Clean"} && ($self->{"rule:Clean"}=~/y/i || $self->{"rule:Clean"}=~/TRUE/i) );
+			$dindel_cmd .= qq(rm $lib.realign_windows.*.txt $lib.dindel_stage2_output_windows.*.glf.txt\n) if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 			$dindel_cmd .= qq(cd ..\n);
 		}
 	}
@@ -3168,6 +3184,10 @@ sub runSOAPsv ($) {
 
 sub runBreakDancer ($) {
 	
+}
+
+sub runCRISP ($) {
+	my $self = shift;
 }
 
 
