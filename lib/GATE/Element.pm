@@ -108,6 +108,10 @@ sub denovo($) {
 	$self->runScripture().$self->runTrinity().$self->runVelvetOases().$self->runSOAPdenovo();
 }
 
+sub anno($) {
+	my $self=shift;
+}
+
 sub ncrna($) {
 	my $self=shift;
 	$self->runtRNAScan();

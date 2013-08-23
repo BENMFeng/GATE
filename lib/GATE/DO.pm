@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1b,08-02-2013";
+$VERSION = "1.1c,08-23-2013";
 package GATE::Element;
 #package GATE::Extension;
 use GATE::ALIAS;
@@ -397,6 +397,9 @@ sub runDataAnalysis ($) {
 	
 }
 
+sub splitSequence ($) {
+	my $self=shift;
+}
 
 #selectIdxFastq.pl v1.1, 2013-05-03
 sub selectIdxFastq ($) {
@@ -2185,9 +2188,12 @@ sub runBowtie($$) {
 		if (@bam>1)
 		{
 			if (exists $self->{"software:picard"}) {
-				my $MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+				my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+				my $MergeSamFiles="$picardpath/MergeSamFiles.jar";
 				$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
 				my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
+				my $MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
+				$MarkDuplicates=correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
 				my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 				my $merge_bam=join " INPUT=",@bam;
 				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
@@ -2401,7 +2407,7 @@ sub runSOAP ($$) {
 						my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 						$merge_bam=join " INPUT\=",@bam;
 						$soap_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam\n";
-						if (exists $self->{"rule:Clean"} && (GATE::Error::boolean($self->{"rule:Clean"})==1 )
+						if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 						{
 							$soap_cmd .= qq(rm -rf ./tmp_merge);
 							$soap_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
@@ -4334,6 +4340,16 @@ sub runEVM ($) {
 
 #########################################################
 #                                                       #
+#                    Annotation                         #
+#                                                       #
+#########################################################
+
+sub runBlast2GO ($) {
+	my $self=shift;
+}
+
+#########################################################
+#                                                       #
 #                    Find ncRNA                         #
 #                                                       #
 #########################################################
@@ -4352,7 +4368,7 @@ sub runtRNAScan ($) {
 	$denovo_genomics=$self->{"database:denovo"} if (exists $self->{"database:denovo"});
 	$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
 	if (!defined $denovo_genomics) {
-		$gm_cmd .= $self->runTrinity();
+		$tRNA_cmd .= $self->runTrinity();
 		$denovo_genomics=$self->{"denovo_genomics"} if (exists $self->{"denovo_genomics"});
 	}
 	my @libraries=sort keys %{$self->{'LIB'}};
@@ -4471,9 +4487,12 @@ sub runTRF ($) {
 	
 }
 
-sub runCirCOS ($) {
-	
-}
+
+#########################################################
+#                                                       #
+#                    Phylogenetic                       #
+#                                                       #
+#########################################################
 
 sub runClustalW2($) {
 	my $self=shift;
@@ -4570,6 +4589,18 @@ sub runMrBayes
 
 sub runCluster ($) {
 #cluster -f tabfile -l -cg m -ca a -na -e 7	
+}
+
+sub runCirCOS ($) {
+	
+}
+
+sub runANFO ($) {
+	
+}
+
+sub mapDamage ($) {
+	
 }
 
 1;

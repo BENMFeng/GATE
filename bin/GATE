@@ -46,7 +46,7 @@ Mainly suitable for generating batch jobs of applications for illumina sequencin
 
 Author: BENM <binxiaofeng@gmail.com>
 
-Version: v0.1.7 nightly, May 6th, 2013
+Version: v0.1.8 nightly, Aug 23th, 2013
 
 =head1 Option
 
@@ -78,6 +78,7 @@ Version: v0.1.7 nightly, May 6th, 2013
     *anno		annotation
     *repeat		repeat finding
     phylogen		phylogenetics analysis
+    *palegen		palegenomics analysis
     *stat		statistical analysis
     plot		plot figure
 
