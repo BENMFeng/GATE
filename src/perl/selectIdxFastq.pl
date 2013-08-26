@@ -33,7 +33,7 @@ if (defined $Index && $Mismatch>0) {
 		$Idx{join "",@$misary}=1;
 	}
 } elsif ($Mismatch==0) {
-	$Idx{$Index}=1;
+	$Idx{$Index}=1 if (defined $Index && $Index ne "");
 }
 #print Dumper %Idx if ($Debug);
 exit() if ($Debug);
