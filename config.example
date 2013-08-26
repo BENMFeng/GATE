@@ -68,13 +68,15 @@ trim_seq=-ap_db $AP -edge 3 -len_t 25 -len_p 0.25 -trim_mode both -ap_mode -verb
 # quality control outdir
 qc_outdir=qc
 
-# if 'clean=yes' or 'clean=TRUE' it will clean the interval files
-clean=yes
-
 # PBS jobs parameters
-multimode=yes
 multithreads=2
 qsub=-cwd -q mem.q -P mem -l cpu=8,vf=16G
+
+[rule]
+# if 'clean=yes' or 'clean=TRUE' it will clean the interval files
+clean=true
+# if you want to run in multi-processes mode
+multimode=yes
 
 [LIB]
 LB=A

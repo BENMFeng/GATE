@@ -101,7 +101,15 @@ sub parseConfig($) {
 				$lib=$1 if (/LB\=([^\=]+)/);
 			}
 		} elsif ($name =~ /rule/i) {
-			$self->{"$name:$1"}=$2 if (/([^\=]+)\=([^\=]+)/);
+			if (/([^\=]+)\=([^\=]+)/) {
+				my ($rule,$condition)=($1,$2);
+				if ($rule =~ /skip/i) {
+					my @cond=split "\s+",$condition;
+					map{$self->{"$name:$rule"}{$_}=1}@cond;
+				} else {
+					$self->{"$name:$rule"}=$condition;
+				}
+			}
 		} else {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($lib,$path)=($1,$2);
@@ -577,7 +585,7 @@ sub selectIdxFastq ($) {
 	}
 	$Idx_cmd .= "cd ..\n";
 	if ($withIdx>0){
-		if (exists $self->{"setting:multimode"}) {
+		if (exists $self->{"rule:multimode"}) {
 			chomp $Idx_cmd_multi;
 			$Idx_cmd_multi=~s/\&+$//;
 			$Idx_cmd_multi.="\n";
@@ -685,7 +693,7 @@ sub mergeOverlapPE($) {
 		$mop_cmd .= "cd ..\n";
 		close MOP if (defined $multirun);
 		if ($withPE>0){
-			if (exists $self->{"setting:multimode"}) {
+			if (exists $self->{"rule:multimode"}) {
 				$mop_cmd_multi =~ s/\s+$//;
 				$mop_cmd_multi =~ s/\&+$//;
 				$mop_cmd_multi .= "\n";
@@ -771,7 +779,7 @@ sub mergeOverlapPE($) {
 		}
 		$mop_cmd .= "cd ..\n";
 		if ($withPE>0){
-			if (exists $self->{"setting:multimode"}) {
+			if (exists $self->{"rule:multimode"}) {
 				chomp $mop_cmd_multi;
 				$mop_cmd_multi =~ s/\s+\&+$//;
 				$mop_cmd_multi .= "\n";
@@ -850,7 +858,7 @@ sub runQA($) {
 			$multi++;
 		}
 		$qa_cmd .= "cd ..\n";
-		if (exists $self->{"setting:multimode"} && $self->{"setting:multimode"} =~ /y/i) {
+		if (exists $self->{"rule:multimode"} && $self->{"rule:multimode"} =~ /y/i) {
 			chomp $qa_cmd_multi;
 			$qa_cmd_multi=~s/\&+$//;
 			$qa_cmd_multi.="\n";
@@ -921,7 +929,7 @@ sub runQA($) {
 			}
 		}
 		$qa_cmd .= "cd ..\n";
-		if (exists $self->{"setting:multimode"} && $self->{"setting:multimode"} =~ /y/i) {
+		if (exists $self->{"rule:multimode"} && $self->{"rule:multimode"} =~ /y/i) {
 			chomp $qa_cmd_multi;
 			$qa_cmd_multi=~s/\s\&+$//;
 			$qa_cmd_multi.="\n";
@@ -1273,7 +1281,7 @@ sub runFltAP ($) {
 	}
 	
 	$fltap_cmd .= "cd ..\n";
-	if (exists $self->{"setting:multimode"}) {
+	if (exists $self->{"rule:multimode"}) {
 		chomp $fltap_cmd_multi;
 		$fltap_cmd_multi=~s/\s\&+$//;
 		$fltap_cmd_multi.="\n";
@@ -2078,7 +2086,7 @@ sub runBWA($$) {
 	}
 	$bwa_cmd.="cd ..\n";
 	if ($skip<@libraries) {
-		return $bwa_cmd unless (exists $self->{'rule:skipaln'} && GATE::Error::boolean($self->{'rule:skipaln'})==1);
+		return $bwa_cmd unless (exists $self->{'rule:skip'}{'aln'} && GATE::Error::boolean($self->{'rule:skip'}{'aln'})==1);
 	} else {
 		return "";
 	}
@@ -2234,7 +2242,7 @@ sub runBowtie($$) {
 		}
 	}
 	$bowtie_cmd .= "cd ..\n";
-	return ($bowtie_cmd) unless (exists $self->{'rule:skipaln'} && GATE::Error::boolean($self->{'rule:skipaln'})==1);
+	return ($bowtie_cmd) unless (exists $self->{'rule:skip'}{'aln'} && GATE::Error::boolean($self->{'rule:skip'}{'aln'})==1);
 }
 
 ## SOAPaligner v2.21
@@ -2410,7 +2418,7 @@ sub runSOAP ($$) {
 						if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 						{
 							$soap_cmd .= qq(rm -rf ./tmp_merge);
-							$soap_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+							$soap_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 						}
 						$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$lib.merge.bam";
 					}
@@ -2706,32 +2714,32 @@ sub runGATK ($$) {
 				if (defined $MergeSamFiles && $MergeSamFiles ne "") {
 ## Merge BAM 
 					#$gatk_cmd .= qq(mkdir -p ./tmp_merge);
-					#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					#$gatk_cmd .= qq(export tmp_merge="./tmpmerge");
-					#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 					$merge_bam=join " INPUT\=",@{$self->{$lib}{"ref-bwabam"}};
 					$gatk_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 					{
 						$gatk_cmd .= qq(rm -rf ./tmp_merge);
-						$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+						$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					}
 					$bam="$lib.merge.bam";
 				} else {
 					$merge_bam=join " ",@{$self->{$lib}{"ref-bwabam"}};
 					$gatk_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep -v "^\@RG" | grep -v "^\@PG" >> $lib.inh.sam);
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					foreach my $bwabam(@{$self->{$lib}{"ref-bwabam"}})
 					{
 						$gatk_cmd .=  qq(\${samtools} view -H $bwabam |grep "^\@RG" >> $lib.inh.sam);
-						$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+						$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					}
 					$gatk_cmd .=  qq(\${samtools} view -H ${$self->{$lib}{"ref-bwabam"}}[0] |grep "^\@PG" >> $lib.inh.sam);
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					$gatk_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					$bam="$lib.merge.bam";
 				}
 				$self->{$lib}{"$ref-bam"}=qq($self->{"-workdir"}/$self->{"setting:var_outdir"}/$lib/$lib.merge.bam);
@@ -2739,7 +2747,7 @@ sub runGATK ($$) {
 			elsif (exists $self->{$lib}{"$ref-bwabam"}) {
 				$bam=${$self->{$lib}{"$ref-bwabam"}}[0];
 				#$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf && vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-				#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				$self->{$lib}{"$ref-bam"}=${$self->{$lib}{"$ref-bwabam"}}[0];
 			}
 		} else {
@@ -2761,7 +2769,7 @@ sub runGATK ($$) {
 		if (defined $bamtools) {
 			my $fltbam="$1.flt.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			$gatk_cmd .= qq(\${bamtools} filter -isMapped true -isPaired true -in $bam -out $fltbam);
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			$bam="$lib.merge.flt.bam";
 		}
 ## Remove duplicates
@@ -2775,27 +2783,27 @@ sub runGATK ($$) {
 		if (!exists $self->{'rule:rmdup'} || GATE::Error::boolean($self->{'rule:rmdup'})==1) {
 			if (defined $MarkDuplicates && $MarkDuplicates ne "") {
 				#$gatk_cmd .= qq(mkdir -p ./tmp_rmdup);
-				#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				#$gatk_cmd .= qq(export tmp_rmdup="./tmp_rmdup");
-				#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 				my $rmdupbam="$1.rmdup.bam" if ($bam=~/([^\/\s]+)\.bam/);
 				$gatk_cmd .= qq($MarkDuplicates INPUT=$bam OUTPUT=$rmdupbam M=$lib.duplicate_report.txt $MarkDuplicatesPara);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				$gatk_cmd .= qq(\${samtools} index $rmdupbam);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				$bam=$rmdupbam;
 				if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 				{
 					$gatk_cmd .= qq(rm -rf ./tmp_rmdup);
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				}
 			}else{
 				my $rmdupbam="$1.rmdup.sort" if ($bam=~/([^\/\s]+)\.bam/);
 				$gatk_cmd .= "\${samtools} rmdup $bam - | \${samtools} rmdup -S - - | \${samtools} sort -m 3000000000 - $rmdupbam";
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				$gatk_cmd .= "\${samtools} index $rmdupbam.bam";
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				$bam="$rmdupbam.bam";
 			}
 		}
@@ -2808,7 +2816,7 @@ sub runGATK ($$) {
 		if (defined $self->{"software:bamtools"}) {
 				my $stats="$1.stats" if ($bam=~/([^\/\s]+)\.bam/);
 				$gatk_cmd .= qq(\${bamtools} stats -insert -in $bam > $stats\n);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 		} 
 
 		if (defined $gatk) {
@@ -2817,25 +2825,25 @@ sub runGATK ($$) {
 #Samtools calls short indels with local realignment, but it does not write a modified BAM file after the realignment.
 #The GATK though provides such a tool that realigns reads in regions with suspected indel artifacts and generates a BAM with cleaned alignments.
 			#$gatk_cmd .= "mkdir ./tmp_realign";
-			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			$gatk_cmd .= qq($gatk -T RealignerTargetCreator -R \$REFERENCE -I $bam -o $lib.gatk.intervals);
 			if (exists $self->{"database:dbSNP"})
 			{
 				$gatk_cmd .= qq( -know \$dbSNP);
 			}
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
 			my $realignedbam="$1.realigned.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$gatk_cmd .= qq($gatk -T IndelRealigner -R \$REFERENCE -I $bam -o $realignedbam -targetIntervals $lib.gatk.intervals -LOD 0.4 -compress 6 -l INFO);
 			if (exists $self->{"database:dbSNP"})
 			{
 				$gatk_cmd .= qq( -know \$dbSNP);
 			}
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			if (defined $self->{"software:bamtools"})
 			{
 				my $stats="$1.stats" if ($realignedbam=~/([^\/\s]+)\.bam/);
 				$gatk_cmd .= qq(\${bamtools} stats -insert -in $realignedbam  > $stats\n);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			}
 			$bam=$realignedbam;
 
@@ -2867,11 +2875,11 @@ sub runGATK ($$) {
 #-knownSites another/optional/setOfSitesToMask.vcf \
 #-o recal_data.grp
 			#$gatk_cmd .= "mkdir ./tmp_covar";
-			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			if (exists $self->{"database:dbSNP"})
 			{
 				$gatk_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -l INFO -I $bam -o $lib.recalibration_report.grp -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 
 ## Generate AnlyzeCovariates Plots
 #
@@ -2896,9 +2904,9 @@ sub runGATK ($$) {
 				if (defined $AnalyzeCovariates)
 				{
 					$gatk_cmd .= qq(mkdir analyzeCovar_v1);
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					$gatk_cmd .= qq($AnalyzeCovariates -recalFile $lib.flt.recal_v1.csv -outputDrir analyzeCovar_v1 -ignoreQ 3);
-					$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+					$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				}
 
 ##Base Quality Recalibration
@@ -2944,7 +2952,7 @@ sub runGATK ($$) {
 #   -o output.bam
 				my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 				$gatk_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 				$bam = $recalbam;
 
 ## Re-analysis of covariatesDetermine the covariates affecting base quality scores
@@ -2963,15 +2971,15 @@ sub runGATK ($$) {
 # -recalFile $PWDS/${subjectID}.flt.recal_v2.csv  \
 # -L $ExonFile
 				$gatk_cmd .= qq($gatk -T BaseRecalibrator -R \$REFERENCE -knowSites \$dbSNP -I $bam -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -o $lib.flt.recal_v2.csv);
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
 			}
 			#else
 			#{
 			#	$gatk_cmd .= qq($gatk -T BaseRecalibrator -I $bam -R \$REFERENCE -run_without_dbsnp_potentially_ruining_quality -o $lib.recalibration_report.grp --intermediate_csv_file $lib.recal.csv --plot_pdf_file $lib.comp.pdf);
-			#	$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			#	$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			#	my $recalbam = "$1.recal.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			#	$gatk_cmd .= qq($gatk -T PrintReads -R \$REFERENCE -I $bam -BQSR $lib.recalibration_report.grp -o $recalbam && $samtools index $lib.recal.bam);
-			#	$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			#	$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			#	$bam = $recalbam;
 			#}
 
@@ -2979,12 +2987,12 @@ sub runGATK ($$) {
 			my $baqbam = "$1.baq.bam" if ($bam=~/([^\/\s]+)\.bam$/);
 			$gatk_cmd .= "\${samtools} calmd -Abr $bam \$REFERENCE > $baqbam && \${samtools} index $baqbam";
 			$bam = $baqbam;
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 
 ## Genotyping calling
 			$gatk_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
-			#$gatk_cmd .= (exists $self->{"setting:multimode"}) ? qq( -ct $self->{"setting:multithreads"} -nt $self->{"setting:multithreads"} -nct $self->{"setting:multithreads"} && ) : "\n";
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? qq( -ct $self->{"setting:multithreads"} -nt $self->{"setting:multithreads"} -nct $self->{"setting:multithreads"} && ) : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
 				my $bgzip;
@@ -2999,7 +3007,7 @@ sub runGATK ($$) {
 					$bgzip=~s/tabix$/bgzip/;
 				}
 				$gatk_cmd .= "$bgzip $lib.gatk.var.vcf";
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			}
 
 ##coverage
@@ -3010,11 +3018,11 @@ sub runGATK ($$) {
 			{
 				my $TL=checkPaht($self->{"setting:TargetIntervalList"});
 				$gatk_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -o $lib.coverage.depth -L $TL -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			} else {
 				#my $output_prefix = $1 if ($bam=~/([^\/\s]+)\.bam/i);
 				$gatk_cmd .= "$gatk -T DepthOfCoverage -I $bam -R \$REFERENCE -l INFO -o $lib.coverage.depth -ct 0 -ct 1 -ct 5 -ct 10 -ct 15 -ct 20 -ct 25 -ct 30 -pt readgroup --omitDepthOutputAtEachBase --omitIntervalStatistics --omitLocusTable";
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			}
 			#$bam=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$lib.realigned.baq.bam";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
@@ -3022,20 +3030,20 @@ sub runGATK ($$) {
 			if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
 			{
 				$gatk_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
-				$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			}
 		} else {
 			$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
 		}
 		if (exists $self->{"software:sam2reads"}) {
 			my $name=$1 if ($bam=~/([^\/\s]+).bam/);
 			my $sam2reads=GATE::Error::checkPath($self->{"software:sam2reads"});
 			$gatk_cmd .= "\${samtools} view -F 4 $bam | $sam2reads -R1 $name\_mapped.R1.fastq -R2 $name\_mapped.R2.fastq -R3 $name\_mapped.R3.fastq -f fq";
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			$gatk_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
-			$gatk_cmd .= (exists $self->{"setting:multimode"}) ? " && " : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 		}
 		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 			$gatk_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
@@ -4135,7 +4143,7 @@ sub runScripture ($) {
 			$scripture_cmd .= "\n";
 		}
 		else {
-			$scripture_cmd .= (exists $self->{"setting:multimode"}) ? " &\n " : "\n";
+			$scripture_cmd .= (exists $self->{"rule:multimode"}) ? " &\n " : "\n";
 		}
 		$scripture_cmd .= qq(cd ../\n);
 		$multi++;
