@@ -78,7 +78,7 @@ Version: v0.1.8 nightly, Aug 23th, 2013
     *anno		annotation
     *repeat		repeat finding
     phylogen		phylogenetics analysis
-    *palegen		palegenomics analysis
+    *paleogen		paleogenomics analysis
     *stat		statistical analysis
     plot		plot figure
 

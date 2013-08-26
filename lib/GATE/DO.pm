@@ -104,7 +104,7 @@ sub parseConfig($) {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($rule,$condition)=($1,$2);
 				if ($rule =~ /skip/i) {
-					my @cond=split "\s+",$condition;
+					my @cond=split /\s+/,$condition;
 					map{$self->{"$name:$rule"}{$_}=1}@cond;
 				} else {
 					$self->{"$name:$rule"}=$condition;
