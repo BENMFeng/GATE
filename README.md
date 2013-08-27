@@ -3,7 +3,7 @@
 #GATE
 ====
 Bioinformatics Stargate --
-**G**enomics integrated **A**pplications, also for **T**ranscriptomics, **E**pigenetics, Evolution experiential analysis pipeline.
+**G**enomics integrated **A**pplications, also for **T**ranscriptomics, **E**pigenetics, Evolution empirical analysis pipeline.
 Mainly suitable for generating batch jobs of applications for illumina sequencing platform.
 
   Copyright (c) 2012 - 2013 - BENM(Binxiao) Feng                        

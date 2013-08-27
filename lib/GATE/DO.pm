@@ -407,6 +407,10 @@ sub runDataAnalysis ($) {
 
 sub splitSequence ($) {
 	my $self=shift;
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		
+	}
 }
 
 #selectIdxFastq.pl v1.1, 2013-05-03

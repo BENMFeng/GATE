@@ -39,7 +39,7 @@ use GATE::Element;
                                    | | \____|_|/_/  \_\ |_|   |_____| | |
                                          
 
-GATE --  Genomics integrated Applications, also for Transcriptomics, Epigenetics, Evolution experiential analysis pipeline. 
+GATE --  Genomics integrated Applications, also for Transcriptomics, Epigenetics, Evolution empirical analysis pipeline. 
 Mainly suitable for generating batch jobs of applications for illumina sequencing platform.
 
 =head1 Version
