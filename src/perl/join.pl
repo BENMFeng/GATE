@@ -4,9 +4,9 @@ use warnings;
 use Getopt::Long;
 use Data::Dumper;
 
-my ($Ref,$k1,$k2,$J,$Interpolation,$Replace,$Ignore,$Help);
+my ($Ref,$k1,$k2,$J,$Interpolation,$Replace,$Ignore,$Skip,$Help);
 my %opts;
-GetOptions(\%opts,"ref:s"=>\$Ref,"key:s"=>\$k1,"ink:s"=>\$k2,"j:s"=>\$J,"split:s"=>\$Interpolation, "e:s"=>\$Replace, "ignore"=>\$Ignore, "help"=>\$Help);
+GetOptions(\%opts,"ref:s"=>\$Ref,"key:s"=>\$k1,"ink:s"=>\$k2,"j:s"=>\$J,"split:s"=>\$Interpolation, "e:s"=>\$Replace, "ignore"=>\$Ignore, "skip:s"=>\$Skip, "help"=>\$Help);
 my $usage = qq(
 join.pl -- join tables according to the same columns(hash tables)
 Usage: perl $0 [option] <Input files> [> Output file]
@@ -17,9 +17,10 @@ Option: -ref <file>		reference file,if undefined, it will join all the input fil
         -split <str> 		set the interpolation for splitting data columns, such as [s+,s,t+,t] and some special symbol, default: t (i.e. \@col=split/\\t/)
         -e <str>		replace missing input fields with a string, default: "-"
         -ignore			ignore differences in case when comparing fields
+        -skip <str:str>		skip line with pattern in front and sensitive case in value, default: '#'
         -help			help information
 
-Example: perl join.pl -ref ref.txt -key 1-3 -ink all:1,2,4-6 -j all:7-10 -split "s+" Input1.txt Input2.txt Input3.txt >Output.txt
+Example: perl join.pl -ref ref.txt -key 1-3 -ink all:1,2,4-6 -j all:7-10 -split "s+" -skip "#" Input1.txt Input2.txt Input3.txt >Output.txt
 
 Notice: "-" is for successive number, "4-6" mean 4,5,6
 [Windows] It just need to run join.pl in ActivePerl with the files of Input1.txt Input2.txt..., Parameter.txt
@@ -28,12 +29,14 @@ in the same directory, and it would output a file named "Output.txt".
 After v2.4 alpha it will append the redundantly matching contents
 
 Author : BENM <BinxiaoFeng\@gmail.com>
-Version: 2.5 alpha
-Data: Dec 20th, 2011
+Version: 2.6 alpha
+Data: Apr 19th, 2013
 \n);
 
 $Interpolation ||= "t";
 $Replace = "-" if (!defined $Replace);
+my @SkipPattern = split /\:/,$Skip if (defined $Skip);
+my %SkipHash = map{$_,1} @SkipPattern if (defined $Skip && @SkipPattern > 0);
 my @Input=@ARGV;
 my @file=glob("./*.txt");
 my $n=0;
@@ -144,6 +147,24 @@ for (my $i=0;$i<@Input;$i++)
 	open (CHK,$Input[$i]) || die "Can open $Input[$i] for reading!\n";
 	my $line=<CHK>;
 	chomp $line;
+	if (defined $Skip)
+	{
+		close CHK;
+		open (CHK,$Input[$i]) || die "Can open $Input[$i] for reading!\n";
+		my $tmpline="";
+		while(<CHK>)
+		{
+			my $last=0;
+			$tmpline=$_;
+			foreach my $skippattern(@SkipPattern)
+			{
+				$last++ if ($tmpline=~/^$skippattern/);
+				last if $last!=0;
+			}
+			last if ($last!=0);
+		}
+		$line=$tmpline;
+	}
 	my @t=();
 	if ($Interpolation eq "t")
 	{
@@ -191,6 +212,17 @@ for (my $i=0;$i<@Input;$i++)
 	open (IN,$Input[$i]) || die "Can open $Input[$i] for reading!\n";
 	while (<IN>)
 	{
+		if (defined $Skip)
+		{
+			my $next=0;
+			my $line=$_;
+			foreach my $skippattern(@SkipPattern)
+			{
+				$next++ if ($line=~/^$skippattern/);
+				last if $next!=0;
+			}
+			next if ($next!=0);
+		}
 		s/\s+$//;
 		my @col=();
 		if ($Interpolation eq "t")
@@ -216,9 +248,17 @@ for (my $i=0;$i<@Input;$i++)
 		next if (($_ eq "")||(@col==0));
 		my $key=join "\t",@col[@{$jcol{$i}}];
 		next if (!defined $key);
+		next if (defined $Ignore && $i>=1 && !exists $table{$key});
+		my $next=0;
+		foreach my $k(@col[@{$join{$i}}])
+		{
+			$next ++ if (exists $SkipHash{$k});
+			last if ($next>0);
+		}
+		next if ($next!=0);
 		if (exists $table{$key}{$i})
 		{
-			$table{$key}{$i} .= " ";
+			$table{$key}{$i} .= ",";
 			$table{$key}{$i} .= (join "\t",@col[@{$join{$i}}]);
 		}
 		else
@@ -283,7 +323,7 @@ if (defined $Ref)
 			{
 				if (exists $table{$key}{$i})
 				{
-					#$out .= " ";
+					#$out .= "," unless ($i==0);
 					$out .= $table{$key}{$i}."\t";
 				}
 				else
@@ -307,7 +347,7 @@ if (defined $Ref)
 }
 else
 {
-	foreach my $key(keys %table)
+	foreach my $key(sort keys %table)
 	{
 		my $out;
 		if (defined $Ignore)
