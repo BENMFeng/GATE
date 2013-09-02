@@ -17,7 +17,7 @@ GetOptions(
 
 if ((defined $Help)||(!defined $Format)||(@ARGV==0))
 {
-	die "Calculate Alignment file Average Coverage\nAuthor: BENM <binxiaofeng\@gmail.com> Version: 3.85 Update 2012-03-21\n
+	die "Calculate Alignment file Average Coverage\nAuthor: BENM <binxiaofeng\@gmail.com> Version: 3.86 Update 2013-09-02\n
 
 cac <IN:mapview|soap> [-lgc Len_GC file] [-L genome_length] [-f MAQ|SOAP|BWA|BOWTIE|SAM|BAM|BLAST-m8|BLAT-psl|Eland] [-sort] [-ref subject|query, default:subject] [-stat output_prefix]\n
 
@@ -119,7 +119,7 @@ elsif (($Format =~ /BWA/i)||($Format =~ /SAM/i)||($Format =~ /BOWTIE/i)||($Forma
 	$test=2;
 	($i,$j,$k)=(2,3,100);
 }
-elsif ($Format =~ /BLAST/i)
+elsif ($Format =~ /BLAT/i)
 {
 	($i,$j,$k)=(13,15,10);
 }
@@ -556,7 +556,7 @@ while(<IN>)
 		if ($chr ne "BENM")
 		{
 			my $Cov1 = sprintf("%.4f",$temp_base/$temp_pos);
-			my $len_denominator=((defined $Lengc)||(exists $LGC{$chr}))?$LGC{$chr}:$E;
+			my $len_denominator=((defined $Lengc)||(exists $LGC{$chr}))?$LGC{$chr}:"$E+";
 			my $Cov2 = sprintf("%.4f",$temp_base/$len_denominator);
 			my $CovRate = int(10000*($len_denominator-$gap_len)/$len_denominator+0.5)/100;
 			print ("$chr\t$len_denominator\t$temp_pos\t$S\t$E\t$temp_base\t$reads\t$Cov1\t$Cov2\t$gap_num\t$gap_len\t$CovRate%\n");
@@ -626,7 +626,8 @@ $Gap_Len+=$gap_len;
 my $cov1 = sprintf("%.4f",$temp_base/$temp_pos);
 my $cov2 = (defined $Lengc) ? sprintf("%.4f",$temp_base/$LGC{$chr}) : sprintf("%.4f",$temp_base/$E);
 my $cov_rate = (defined $Lengc) ? int(10000*($LGC{$chr}-$gap_len)/$LGC{$chr}+0.5)/100 : int(10000*($E-$gap_len)/$E+0.5)/100;
-print ("$chr\t$temp_pos\t$S\t$E\t$temp_base\t$reads\t$cov1\t$cov2\t$gap_num\t$gap_len\t$cov_rate%\n");
+my $len_denominator=((defined $Lengc)||(exists $LGC{$chr}))?$LGC{$chr}:"$E+";
+print ("$chr\t$len_denominator\t$temp_pos\t$S\t$E\t$temp_base\t$reads\t$cov1\t$cov2\t$gap_num\t$gap_len\t$cov_rate%\n");
 $chr_num++;
 my $aln_len_n50=stat_n50($temp_pos,\@aln_len_array,$consensus_len_report);
 my $gap_blocksize_n50=stat_n50($gap_len,\@gap_blocksize_array,$gap_block_size_report);
