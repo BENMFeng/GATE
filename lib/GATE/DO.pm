@@ -2636,7 +2636,8 @@ sub runLASTZ($) {
 #                                                       #
 #########################################################
 
-## GATK 2.5-2-gf57256b
+## GATK v2.7-2-g6bda569
+## Picard v1.97
 sub runGATK ($$) {
 	my $self=shift;
 	my $ref=shift;
@@ -3206,6 +3207,10 @@ sub runBreakDancer ($) {
 
 sub runCRISP ($) {
 	my $self = shift;
+}
+
+sub runPlink ($) {
+	
 }
 
 

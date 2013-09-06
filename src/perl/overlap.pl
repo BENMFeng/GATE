@@ -54,14 +54,14 @@ The algorithm is that:
 =head1 Version
 
   Author: BENM, binxiaofeng@gmail.com
-  Version: 4.1.7,  Date: 2008-2-25 UpDate: 2013-04-16
+  Version: 4.1.8,  Date: 2008-2-25 UpDate: 2013-09-06
 
 =head1 Usage
 
   --i1 <str>					input the first table file
-  --f1 <int-int-int> or <int-int-int-int>	input the first table format [id-start-end] [id1-id2-start-end]
+  --f1 <int-int-int> or <int-int-int-int>	input the first table required column [id-start-end] [id1-id2-start-end]
   --i2 <str>					input the second table file
-  --f2 <int-int-int> or <int-int-int-int>	input the second table format [id-start-end] [id1-id2-start-end]
+  --f2 <int-int-int> or <int-int-int-int>	input the second table required column [id-start-end] [id1-id2-start-end]
   --OL <num-str>	set the overlapped limited condition, see below "PS", default: 0
   --final	Limit the final overlap limited conditions
   --mN <int>	set the minimuim overlapping number: [0] (only could be used in existing "--E" option
@@ -256,9 +256,9 @@ if (defined $OverlapLimited)
 {
 	my $ol=$1 if ($OverlapLimited=~/^([^\:]+)/);
 	@orate=split /-/,$ol;
-	$minRate = ($orate[0] =~ m/\d+/) ? $orate[0] : "";
+	$minRate = ($orate[0] =~ m/^(\d+)$/) ? $orate[0] : "";
 	$minRate = 1/1.000000000000001 if ($minRate == 1);
-	if ($orate[0] =~ m/(\d+)\-bp/)
+	if ($orate[0] =~ m/(\d+)bp/)
 	{
 		$minSize = $1;
 		$minRate = 0;
@@ -405,7 +405,7 @@ if (defined $input2)
 	enumerate_overlap(\%FirstTable,\%SecondTable,$Enumerate) if (defined $Enumerate);
 	filterout_overlap(\%FirstTable,\%SecondTable) if ((defined $Filterout)&&($Filterout eq "D"));
     
-	if ((defined $Combine) ||  (defined $Filterout) )
+	if ((defined $Combine) ||  (defined $Filterout) || (defined $Extract))
 	{
 		my %CombineTable;
 		foreach  my $id1 (sort keys %FirstTable)
@@ -787,64 +787,64 @@ sub filterout_overlap
 	}
 	if ((!defined $table2_hash)||(keys %$table2_hash==0))
 	{
-	foreach  my $table_id (sort keys %$table1_hash)
-	{
-		my @table_order = sort {$a->[0]<=>$b->[0]} @{$table1_hash->{$table_id}};
-		print STDERR "filterout overlap on $table_id\n" if ($Verbose);
-		my @remain=();
-		push @remain,[@{$table_order[0]}];
-		my @last=();
-		push @last,@remain;
-		for (my $i=1;$i<@table_order;$i++)
+		foreach  my $table_id (sort keys %$table1_hash)
 		{
-			if ((@remain>0)&&($table_order[$i][0]>$remain[-1][1]))
+			my @table_order = sort {$a->[0]<=>$b->[0]} @{$table1_hash->{$table_id}};
+			print STDERR "filterout overlap on $table_id\n" if ($Verbose);
+			my @remain=();
+			push @remain,[@{$table_order[0]}];
+			my @last=();
+			push @last,@remain;
+			for (my $i=1;$i<@table_order;$i++)
+			{
+				if ((@remain>0)&&($table_order[$i][0]>$remain[-1][1]))
+				{
+					for (my $j=0;$j<@remain;$j++)
+					{
+						print "$table_id\t";
+						print "$remain[$j][2]\t" if ((defined $remain[$j][2])&&($remain[$j][2] ne ""));
+						print "$remain[$j][0]\t$remain[$j][1]\n";
+					}
+					@remain=();
+					push @remain,[@{$table_order[$i]}];
+				}
+				else
+				{
+					my ($S1,$E1,$regionID1)=(@remain>0)?@{$remain[-1]}:@last;
+					my ($S2,$E2,$regionID2)=@{$table_order[$i]};
+					if ( $OverlapLimited ne "" )
+					{
+						my @compare=compare_overlap ([$S1,$E1],[$S2,$E2]);
+						if (scalar (@compare) ==2 )
+						{
+							pop @remain if (@remain>0);
+							@last=();
+							push @last,@compare;
+							$last[2] = $regionID2 if ((defined $regionID2)&&($regionID2 ne ""));
+						}
+						else
+						{
+							for (my $j=0;$j<@remain;$j++)
+							{
+								print "$table_id\t";
+								print "$remain[$j][2]\t" if ((@{$remain[$j]}>2)&&($remain[$j][2] ne ""));
+								print "$remain[$j][0]\t$remain[$j][1]\n";
+							}
+							push @remain,[@{$table_order[$i]}];
+						}
+					}
+				}
+			}
+			if (@remain>0)
 			{
 				for (my $j=0;$j<@remain;$j++)
 				{
 					print "$table_id\t";
-					print "$remain[$j][2]\t" if ((defined $remain[$j][2])&&($remain[$j][2] ne ""));
+					print "$remain[$j][2]\t" if ((@{$remain[$j]}>2)&&($remain[$j][2] ne ""));
 					print "$remain[$j][0]\t$remain[$j][1]\n";
 				}
-				@remain=();
-				push @remain,[@{$table_order[$i]}];
-			}
-			else
-			{
-				my ($S1,$E1,$regionID1)=(@remain>0)?@{$remain[-1]}:@last;
-				my ($S2,$E2,$regionID2)=@{$table_order[$i]};
-				if ( $OverlapLimited ne "" )
-				{
-					my @compare=compare_overlap ([$S1,$E1],[$S2,$E2]);
-					if (scalar (@compare) ==2 )
-					{
-						pop @remain if (@remain>0);
-						@last=();
-						push @last,@compare;
-						$last[2] = $regionID2 if ((defined $regionID2)&&($regionID2 ne ""));
-					}
-					else
-					{
-						for (my $j=0;$j<@remain;$j++)
-						{
-							print "$table_id\t";
-							print "$remain[$j][2]\t" if ((@{$remain[$j]}>2)&&($remain[$j][2] ne ""));
-							print "$remain[$j][0]\t$remain[$j][1]\n";
-						}
-						push @remain,[@{$table_order[$i]}];
-					}
-				}
 			}
 		}
-		if (@remain>0)
-		{
-			for (my $j=0;$j<@remain;$j++)
-			{
-				print "$table_id\t";
-				print "$remain[$j][2]\t" if ((@{$remain[$j]}>2)&&($remain[$j][2] ne ""));
-				print "$remain[$j][0]\t$remain[$j][1]\n";
-			}
-		}
-	}
 	}
 	else
 	{
@@ -867,8 +867,9 @@ sub filterout_overlap
 				my $sec_begin=0;
 				for (my $i=0;$i<@table1_order;$i++)
 				{
-					my ($S1,$E1,$regionID1)=@{$table1_order[$i]};
-					my $print=0;
+					my @tmp_table=@{$table1_order[$i]};
+					my ($S1,$E1,$regionID1)=@tmp_table;
+					my $print=1;
 					for (my $j=$sec_begin;$j<@table2_order;$j++)
 					{
 						my ($S2,$E2,$regionID2)=@{$table2_order[$j]};
@@ -878,17 +879,32 @@ sub filterout_overlap
 							next;
 						}
 						last if ($S2>$E1);
-						my @compare=compare_overlap ([$S1,$E1],[$S2,$E2]);
+						my @compare=compare_overlap([$S1,$E1],[$S2,$E2]);
 						if (@compare==2)
 						{
-							$print++;
+							if ($S2>$S1) {
+								print "$table_id\t";
+								print "$regionID1\t" unless (@table1_order<3 || !defined $regionID1);
+								print "$S1\t".($S2-1)."\n";
+							}
+							if ($E2<$E1) {
+								$tmp_table[0]=$E2+1;
+								($S1,$E1,$regionID1)=@tmp_table;
+							} else {
+								$print=0;
+							}
+							if ($S1==$S1 && $E2==$E1) {
+								$print=0;
+							}
+						} else {
+							last;
 						}
 					}
-					if ($print==0)
+					if ($print==1)
 					{
 						print "$table_id\t";
-						print "$table1_order[$i][2]\t" unless (@table1_order<3);
-						print "$table1_order[$i][0]\t$table1_order[$i][1]\n";
+						print "$regionID1\t" unless (@table1_order<3 || !defined $regionID1);
+						print "$S1\t$E1\n";
 					}
 				}
 			}
@@ -900,7 +916,8 @@ sub extract_overlap
 {
 	my $block_p=shift;
 	my $limitedSize ||= 1;
-	my $limitedDepth ||= 2;
+	my $limitedDepth ||= 1;
+	print STDERR "extracting overlap\n" if ($Verbose);
 	if (defined $rd1)
 	{
 		if ($Extract eq "N")
@@ -1172,7 +1189,7 @@ sub compare_overlap
 		}
 		else
 		{
-			 return ($S,$E);
+			return ($S,$E);
 		}
 	}
 	elsif ($limitType eq "big")
