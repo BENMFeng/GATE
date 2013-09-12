@@ -54,7 +54,7 @@ Version: v0.1.9 nightly, Sep 12th, 2013
   --workdir=<dir>/-w <dir>	set workdir
   --prefix=<str>/-p <str>	set output pipeline shell file prefix name, default: pipeline
   --auto		autorun
-  --checkrun	check finished processes and output renew shell
+  --checkrun		check finished processes and output renew shell
   --version		show update info
   --instruction		show intruction
   --verbose		print out run status
