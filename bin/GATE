@@ -25,7 +25,7 @@ use lib "$FindBin::Bin/../lib";
 use File::Basename qw(basename dirname);
 use GATE;
 use GATE::Element;
-#use GATE::Extension;
+use GATE::Extension;
 
 =head1 Name
                                _____________________________________________
@@ -46,7 +46,7 @@ Mainly suitable for generating batch jobs of applications for illumina sequencin
 
 Author: BENM <binxiaofeng@gmail.com>
 
-Version: v0.1.8 nightly, Aug 23th, 2013
+Version: v0.1.9 nightly, Sep 12th, 2013
 
 =head1 Option
 
@@ -54,6 +54,7 @@ Version: v0.1.8 nightly, Aug 23th, 2013
   --workdir=<dir>/-w <dir>	set workdir
   --prefix=<str>/-p <str>	set output pipeline shell file prefix name, default: pipeline
   --auto		autorun
+  --checkrun	check finished processes and output renew shell
   --version		show update info
   --instruction		show intruction
   --verbose		print out run status
@@ -90,7 +91,7 @@ $ bin/GATE qc aln var exp --config=config.txt --prefix=test
 
 =cut
 my %opts;
-my ($Configure,$Verbose,$Workdir,$Prefix,$Auto,$Version,$Instruction,$Debug,$Help);
+my ($Configure,$Verbose,$Workdir,$Prefix,$Auto,$CheckRun,$Version,$Instruction,$Debug,$Help);
 GetOptions(
 	\%opts,
 	"config=s"=>\$Configure,
@@ -100,6 +101,7 @@ GetOptions(
 	"prefix=s"=>\$Prefix,
 	"p:s"=>\$Prefix,
 	"auto"=>\$Auto,
+	"checkrun"=>\$CheckRun,
 	"instruction"=>\$Instruction,
 	"version"=>\$Version,
 	"verbose"=>\$Verbose,
@@ -263,6 +265,13 @@ apoa1.namd >& namd.log
 
 die $updateLog if (defined $Version);
 die $instruction if (defined $Instruction);
+if ($CheckRun){
+	foreach my $shellfile(@ARGV) {
+		my $gate=GATE->new();
+		$gate->GATE::Extension::check_run($shellfile,$Prefix);
+	}
+	exit();
+}
 my $podtext=`pod2text $0`;
 #die color ("BOLD WHITE ON_BRIGHT_BLACK"),$podtext,color("reset"),"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
 die $podtext,"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));

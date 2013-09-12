@@ -39,7 +39,7 @@ use GATE::DO;
 
 use vars qw(@ISA $VERSION @TYPES %TYPES);
 
-$VERSION = "0.2";
+$VERSION = "0.3, 2013-09-12";
 
 #@ISA=qw(GATE::Element GATE::Extension);
 
@@ -53,9 +53,6 @@ use constant ENTITY => "ENTITY";
 %TYPES=map { $_ => 1 } @TYPES;
 
 #-----------------
-sub new {
-	return shift->SUPER::new(@_);
-}
 
 sub make_soapdenovo_config ($) {
 	my $self = shift;
@@ -250,4 +247,75 @@ ggplot\(data=data, aes\(x=log\(coverage\), y=loci, color=prep_type\)\) +
 );
 }
 
+
+sub check_run ($;@) {
+	my $self = shift;
+	my ($shell,$prefix)=@_;
+	$prefix ||= "new";
+	my $i=0;
+	my @filehandle=();
+	my @outhandle=();
+	parse_sh($shell,\@filehandle,\@outhandle,$i,$prefix);
+}
+
+sub parse_sh {
+	my ($shfile,$inhandle,$outhandle,$i,$prefix)=@_;
+	my $glob;
+	my $skip=0;
+	my @path=();
+	my %hash=();
+	my $in=$$inhandle[$i];
+	my $out=$$outhandle[$i];
+	open($in,$shfile) || die "Can't open $shfile for reading!\n";
+	open($out, ">$prefix.$shfile") || die "Can't write to new.$shfile\n";
+	while (<$in>) {
+		chomp;
+		my $line=$_;
+		next if (!defined $_ || $_ eq "" || $_=~/^\s+$/);
+		while ($line=~/([^\"\s]+\.sh)/g) {
+			$i++;
+			parse_sh($1,$inhandle,$outhandle,$i,$prefix);
+		}
+		if ($line=~/export\s+([^\=\s]+)\=(\S+)/) {
+			my ($alias,$source)=($1,$2);
+			$source=~s/\"//g;
+			$hash{$alias}=$source;
+		}
+		if ($line=~/cd\s+(\S+)/) {
+			my $dir=$1;
+			$dir=~s/\"//g;
+			while ($dir =~ /\.\./g) {
+				pop @path;
+			}
+			if ($dir ne ".." && $dir !~ /^\//) {
+				if ($dir=~/\$\{([^\{\}\s]+)\}/ || $dir=~/\$(\S+)/) {
+					my $alias=$1;
+					if (exists $hash{$alias}) {
+						$dir=$hash{$alias};
+					} else {
+						die "$shfile:\n\t$line\n";
+					}
+				}
+				push @path,$dir;
+			} elsif ($dir=~/^\//) {
+				@path=();
+				push @path,$dir;
+			}
+			my $fullpath=join "/",@path;
+			my @finished=glob("$fullpath/finished*");
+			if (@finished>0) {
+				$skip=1;
+			} else {
+				$skip=0;
+			}
+		}
+		if ($skip==0 || $line=~/^cd\s+\S+$/) {
+			print $out "$line\n";
+		} else {
+			print $out "\#$line\n";
+		}
+	}
+	close $in;
+	close $out;
+}
 1;
