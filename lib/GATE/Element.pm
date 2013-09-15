@@ -65,7 +65,7 @@ sub bc($) {
 
 sub qc($) {
 	my $self=shift;
-	$self->selectIdxFastq().$self->mergeOverlapPE().$self->runQA().$self->runFltDup().$self->runFltAP().$self->runRSeQC().$self->runRNASeqQC().$self->runSEECER();
+	$self->selectIdxFastq().$self->mergeOverlapPE().$self->runQA().$self->runFastQC().$self->runFltDup().$self->runFltAP().$self->runRSeQC().$self->runRNASeqQC().$self->runSEECER();
 }
 
 sub aln($) {

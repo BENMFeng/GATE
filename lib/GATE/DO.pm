@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1c,08-23-2013";
+$VERSION = "1.1d,09-15-2013";
 package GATE::Element;
 #package GATE::Extension;
 use GATE::ALIAS;
@@ -136,9 +136,9 @@ sub parseDir($) {
 	$self->{'-workdir'}=$Workdir;
 }
 
-sub getlibSeq ($) {
+sub getlibInput ($) {
 	my $lib=shift;
-	my %Seq=();
+	my %Input=();
 	for my $i(sort keys %$lib) {
 		if (exists $lib->{$i}) {
 			my ($A,$B)=($1,$2) if ($i=~/(\w+)([12])/);
@@ -146,17 +146,17 @@ sub getlibSeq ($) {
 				if (defined $A && defined $B) {
 					my $C=($B==1)?2:1;
 					if (exists $lib->{"$A$C"}) {
-						push @{$Seq{$B}},$reads;
+						push @{$Input{$B}},$reads;
 					} else {
-						push @{$Seq{0}},$reads;
+						push @{$Input{0}},$reads;
 					}
 				} else {
-					push @{$Seq{0}},$reads;
+					push @{$Input{0}},$reads;
 				}
 			}
 		}
 	}
-	return %Seq;
+	return %Input;
 }
 
 sub correctJavaCmd
@@ -209,7 +209,7 @@ sub correctJavaCmd
 	return $cmd;
 }
 
-sub check_fileformat ($) {
+sub checkFileFormat ($) {
 	my $file=shift;
 	if (-B $file) {
 		if ($file=~/bam$/i)
@@ -646,7 +646,7 @@ sub mergeOverlapPE($) {
 			}
 			$mop_cmd .= "cd $lib\n";
 			$mop_cmd_multi .= "cd $lib && ";
-			my %fq=getlibSeq($self->{"LIB"}{$lib});
+			my %fq=getlibInput($self->{"LIB"}{$lib});
 			my @Reads1=();
 			@Reads1=@{$fq{1}} if (exists $fq{1});
 			my @Reads2=();
@@ -735,7 +735,7 @@ sub mergeOverlapPE($) {
 			$mop_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 			$mop_cmd .= "cd $lib\n";
 			$mop_cmd_multi .= "cd $lib\n";
-			my %fq=getlibSeq($self->{"LIB"}{$lib});
+			my %fq=getlibInput($self->{"LIB"}{$lib});
 			my @Reads1=();
 			@Reads1=@{$fq{1}} if (exists $fq{1});
 			my @Reads2=();
@@ -960,7 +960,7 @@ sub runFltDup ($) {
 		$fltpcr_cmd .= qq(echo `date`; echo "$lib"\n);
 		$fltpcr_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$fltpcr_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		my @Reads1=();
 		@Reads1=@{$fq{1}} if (exists $fq{1});
 		my @Reads2=();
@@ -1268,7 +1268,7 @@ sub runFltAP ($) {
 		$fltap_cmd_multi .= "rm *.out && " if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
 		if (defined $multirun) {
 			print FLA "rm *.out && " if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 );
-			print FLA "cd ..\n";
+			print FLA "cd .. && ";
 		}
 		$fltap_cmd .= qq(rm align.mat\n) unless (!defined $align_matrix || -f "align.mat");
 		$fltap_cmd_multi .= qq(rm align.mat && ) unless (!defined $align_matrix || -f "align.mat");
@@ -1277,13 +1277,15 @@ sub runFltAP ($) {
 		$fltap_cmd_multi =~ s/\s+$//;
 		$fltap_cmd_multi =~ s/\&\&$//;
 		if ($multi % $self->{"setting:multithreads"}!=0){
-			$fltap_cmd_multi .= "&\n";
+			$fltap_cmd_multi .= " &\n";
 		} else {
 			$fltap_cmd_multi .= "\n";
 		}
 		$fltap_cmd_multi .= "cd ..\ncd ..\n";
 	}
-	
+	if (defined $multirun) {
+		print FLA "cd ..\n";
+	}
 	$fltap_cmd .= "cd ..\n";
 	if (exists $self->{"rule:multimode"}) {
 		chomp $fltap_cmd_multi;
@@ -1358,8 +1360,140 @@ sub runRSeQC ($) {
 	return ($rseqc_cmd);
 }
 
+#fastqc [-o output dir] [--(no)extract] [-f fastq|bam|sam] [-c contaminant file] seqfile1 .. seqfileN
 sub runFastQC ($) {
-	
+	my $self = shift;
+	if (!exists $self->{"software:FastQC"} || !defined $self->{"software:FastQC"}){
+		return "";
+	}
+	my $fastqc=checkPath($self->{"software:FastQC"});
+	my $fastqc_cmd = qq(echo `date`; echo "run FastQC"\n);
+	$fastqc_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$fastqc_cmd .= qq(export fastqc="$fastqc"\n);
+	my $para = (exists $self->{"setting:FastQC"}) ? $self->{"setting:FastQC"} : "" ;
+	my $multirun=GATE::Error::checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+	$fastqc_cmd .= qq(export multirun="$multirun"\n);
+	my $multirun_sh=(-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"})) ? qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/runFastQC.$$.sh) : qq($self->{"-workdir"}/runFastQC.$$.sh);
+	if (defined $multirun) {
+		open (QC,">$multirun_sh");
+		$fastqc_cmd .= qq(export multirun="$multirun"\n);
+	}
+	my $contaminat_file=(exists $self->{"database:contaminat_file"}) ? GATE::Error::checkPath($self->{"database:contaminat_file"}) :
+						(exists $self->{"database:AP"}) ? GATE::Error::checkPath($self->{"database:AP"}) : "";
+	$fastqc_cmd .= qq(export contamination="$contaminat_file"\n);
+	$fastqc_cmd .= qq(cd $self->{"-workdir"}\n);
+	$fastqc_cmd .= qq(export qc_outdir=$self->{"setting:qc_outdir"}\n);
+	$fastqc_cmd .= qq([[ -d \${qc_outdir} ]] || mkdir \${qc_outdir}\n) if (!-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}));
+	$fastqc_cmd .= qq(cd $self->{"setting:qc_outdir"}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $fastqc_cmd_multi="";
+	my $fastqc_cmd_head=$fastqc_cmd;
+	foreach my $lib (@libraries) {
+		$fastqc_cmd_multi .= $fastqc_cmd_head;
+		$fastqc_cmd .= qq(echo `date`; echo "$lib"\n);
+		$fastqc_cmd_multi .= qq(echo `date`; echo "$lib"\n);
+		$fastqc_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+		$fastqc_cmd_multi .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+		$fastqc_cmd .= "cd $lib\n";
+		$fastqc_cmd_multi .= "cd $lib\n";
+		if (defined $multirun) {
+			print QC qq(echo `date`; echo "$lib" && );
+			print QC qq([[ -d $lib ]] || mkdir $lib && ) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
+			print QC qq(cd $lib && );
+		}
+		my %input=getlibInput($self->{"LIB"}{$lib});
+		if (exists $input{1} && exists $input{2}){
+			for (my $i=0;$i<@{$input{2}};$i++){
+				my ($A,$B)=(${$input{1}}[$i],${$input{2}}[$i]);
+				my $format1=checkFileFormat($A);
+				my $format2=checkFileFormat{$B};
+				if ($format1 eq $format2){
+					$fastqc_cmd .= qq(\${fastqc} $para -f $format1 );
+					$fastqc_cmd .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+					$fastqc_cmd .= qq( $A $B\n);
+					$fastqc_cmd_multi .= qq(\${fastqc} $para -f $format1 );
+					$fastqc_cmd_multi .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+					$fastqc_cmd_multi .= qq( $A $B && );
+					if (defined $multirun) {
+						print QC qq(\${fastqc} $para -f $format1 );
+						print QC qq( -c \${contamination} ) if ($contaminat_file ne "");
+						print QC qq( $A $B && );
+					}
+				} else {
+					$fastqc_cmd .= qq(\${fastqc} $para -f $format1 );
+					$fastqc_cmd .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+					$fastqc_cmd .= qq( $A\n);
+					$fastqc_cmd .= qq(\${fastqc} $para -f $format2 );
+					$fastqc_cmd .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+					$fastqc_cmd .= qq( $B\n);
+					$fastqc_cmd_multi .= qq(\${fastqc} $para -f $format1 );
+					$fastqc_cmd_multi .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+					$fastqc_cmd_multi .= qq( $A && );
+					$fastqc_cmd_multi .= qq(\${fastqc} $para -f $format2 );
+					$fastqc_cmd_multi .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+					$fastqc_cmd_multi .= qq( $B && );
+					if (defined $multirun) {
+						print QC qq(\${fastqc} $para -f $format1 );
+						print QC qq( -c \${contamination} ) if ($contaminat_file ne "");
+						print QC qq( $A && );
+						print QC qq(\${fastqc} $para -f $format2 );
+						print QC qq( -c \${contamination} ) if ($contaminat_file ne "");
+						print QC qq( $B && );
+					}
+				}
+			}
+		}
+		if (exists $input{0}) {
+			for (my $i=0;$i<@{$input{0}};$i++){
+				my $format=checkFileFormat{${$input{0}}[$i]};
+				my $C = ${$input{0}}[$i];
+				$fastqc_cmd .= qq(\${fastqc} $para -f $format );
+				$fastqc_cmd .= qq( -c  $contaminat_file ) if ($contaminat_file ne "");
+				$fastqc_cmd .= qq( $C\n);
+				$fastqc_cmd_multi .= qq(\${fastqc} $para -f $format );
+				$fastqc_cmd_multi .= qq( -c \${contamination} ) if ($contaminat_file ne "");
+				$fastqc_cmd_multi .= qq( $C && );
+				if (defined $multirun) {
+					print QC qq(\${fastqc} $para -f $format );
+					print QC qq( -c \${contamination} ) if ($contaminat_file ne "");
+					print QC qq( $C && );
+				}
+			}
+		}
+		$fastqc_cmd_multi =~ s/[\&\s]+$//;
+		$fastqc_cmd_multi =~ s/[\&\s]+$//;
+		if ($multi % $self->{"setting:multithreads"}!=0){
+			$fastqc_cmd_multi .= " &\n";
+		} else {
+			$fastqc_cmd_multi .= "\n";
+		}
+		$fastqc_cmd .= "cd ..\n";
+		$fastqc_cmd_multi .= "cd ..\ncd ..\n";
+		if (defined $multirun) {
+			print QC "cd .. && ";
+		}
+		$fastqc_cmd .= "cd ..\n";
+	}
+	if (defined $multirun) {
+		print QC qq(cd ..\n);
+	}
+	if (exists $self->{"rule:multimode"}) {
+		chomp $fastqc_cmd_multi;
+		$fastqc_cmd_multi=~s/[\s\&]+$//;
+		$fastqc_cmd_multi=~s/[\s\&]+$//;
+		$fastqc_cmd_multi.="\n";
+		$fastqc_cmd_multi.= print_check_process('fastqc');
+		if (defined $multirun) {
+			my $multirun_cmd = $fastqc_cmd_multi_head;
+			$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"setting:multithreads"}\n);
+			$multirun_cmd .= print_check_process('fastqc','$multirun_sh');
+			return $multirun_cmd;
+		} else {
+			return $fastqc_cmd_multi;
+		}
+	} else {
+		return $fastqc_cmd;
+	}
 }
 
 sub runFastX ($) {
@@ -1477,7 +1611,7 @@ sub runSEECER($) {
 	foreach my $lib(@libraries) {
 		$seecer_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$seecer_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
 			for (my $i=0;$i<@{$fq{2}};$i++) {
 				my $fq1=${$fq{1}}[$i];
@@ -1562,7 +1696,7 @@ sub runMAQ ($$) {
 		$maq_cmd .= qq(echo `date`; echo "$lib"\n);
 		$maq_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) if (!-e qq($self->{"-workdir"}/$self->{"setting:aln_outdir"}/$lib));
 		$maq_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		my @map;
 		my $rg="";
 		if (exists $fq{1} && exists $fq{2}){
@@ -1792,7 +1926,7 @@ sub runBWA($$) {
 			$bwa_cmd .= "cd ../\n";
 			next;
 		}
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
 			for (my $j=0;$j<@{$fq{2}};$j++) {
 				my $bam="";
@@ -2136,7 +2270,7 @@ sub runBowtie($$) {
 		$bowtie_cmd .= qq(echo `date`; echo "$lib"\n);
 		$bowtie_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$alndir/$lib));
 		$bowtie_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		my @bam=();
 		if (exists $fq{1} && exists $fq{2}){
 			my @fq1=@{$fq{1}};
@@ -2295,7 +2429,7 @@ sub runSOAP ($$) {
 	foreach my $lib(@libraries) {
 		$soap_cmd .= "[[ -d $lib ]] || mkdir $lib\n" if (!-d qq($self->{"-workdir"}/$soap_outdir/$lib));
 		$soap_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
 			my @fq1=@{$fq{1}};
 			my @fq2=@{$fq{2}};
@@ -2505,7 +2639,7 @@ sub runTopHat($$) {
 		$tophat_cmd .= qq(echo `date`; echo "$lib"\n);
 		#$tophat_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/tophat/$lib));
 		#$tophat_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		my @bam=();
 		if (exists $fq{1} && exists $fq{2}){
 			my @fq1=@{$fq{1}};
@@ -3435,7 +3569,7 @@ sub runTrinity($) {
 		$trinity_cmd .= qq(cd $lib\n);
 		$trinity_cmd .= qq([[ -d trinity_asm ]] || mkdir trinity_asm\n) unless (-d qq($self->{"-workdir"}/$lib/trinity_asm));
 		$trinity_cmd .= qq(cd trinity_asm\n);
-		my %read=getlibSeq($self->{"LIB"}{$lib});
+		my %read=getlibInput($self->{"LIB"}{$lib});
 		if (exists $read{1} && exists $read{2}) {
 			if (@{$read{1}}>1 && @{$read{2}}>1){
 				my ($reads1,$reads2);
@@ -3546,20 +3680,20 @@ sub runVelvetOases ($) {
 		$velvet_cmd .= qq(echo `date`; echo "$lib"\n);
 		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
 		$velvet_cmd .= qq(cd $lib\n);
-		my %read=getlibSeq($self->{"LIB"}{$lib});
+		my %read=getlibInput($self->{"LIB"}{$lib});
 		my $input="";
 		if (exists $read{0}) {
 			for (my $i=0;$i<@{$read{0}};$i++) {
-				$input.="-short --".$self->check_fileformat(${$read{0}}[$i])." ${$read{0}}[$i]";
+				$input.="-short --".$self->checkFileFormat(${$read{0}}[$i])." ${$read{0}}[$i]";
 			}
 		}
 		if (exists $read{1} && exists $read{2} && @{$read{2}}==@{$read{1}}) {
 			for (my $i=0;$i<@{$read{2}};$i++) {
 				my $reads1=${$read{1}}[$i];
 				my $reads2=${$read{2}}[$i];
-				my $format=$self->check_fileformat($reads1);
+				my $format=$self->checkFileFormat($reads1);
 				my $reads=shuffleSequences($reads1,$reads2,$format);
-				$input.="-shortPaired --".$self->check_fileformat($reads)." $reads";
+				$input.="-shortPaired --".$self->checkFileFormat($reads)." $reads";
 			}
 		}
 		$velvet_cmd .= qq(\${velveth} $lib \${velvethpara} $input\n);
@@ -3645,11 +3779,11 @@ sub make_config {
 			die "$config is existing!\n";
 		}
 		open(OUT,">$config") or die $!;
-		my %read=getlibSeq($self->{"LIB"}{$lib});
+		my %read=getlibInput($self->{"LIB"}{$lib});
 		if (exists $read{1} && exists $read{2}) {
 			print OUT "[LIB]\n";
 			for (my $i=0;$i<@{$read{2}};$i++) {
-				my $type=(check_fileformat(${$read{1}}[$i])=~/fastq/i)?"fq":"fa";
+				my $type=(checkFileFormat(${$read{1}}[$i])=~/fastq/i)?"fq":"fa";
 				my $R1=$type."1";
 				my $ins=(exists $self->{$lib}{$R1}{$i}{'PI'}) ? $self->{$lib}{$R1}{$i}{'PI'} : 200;
 				print OUT "avg_ins=$ins\n";
@@ -3676,7 +3810,7 @@ sub make_config {
 			print OUT "[LIB]\n";
 			for (my $i=0;$i<@{$read{0}};$i++) {
 				print OUT "rank=1\nasm_flags=1\n";
-				my $head=(check_fileformat(${$read{0}}[$i])=~/fastq/i)?"q":"f";
+				my $head=(checkFileFormat(${$read{0}}[$i])=~/fastq/i)?"q":"f";
 				print OUT qq($head=${$read{0}}[$i]\n);
 			}
 		}
@@ -3741,7 +3875,7 @@ sub runNewbler ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries)
 	{
-		my %read=getlibSeq($self->{"LIB"}{$lib});
+		my %read=getlibInput($self->{"LIB"}{$lib});
 		$newbler_cmd .= qq(\${NEWBLER}/newAssembly $lib\n);
 		if (exists $read{1} && exists $read{2}) {
 			for (my $i=0;$i<@{$read{2}};$i++) {
@@ -4142,7 +4276,7 @@ sub runScripture ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $multi=0;
 	foreach my $lib (@libraries) {
-		#my %fq=getlibSeq($self->{"LIB"}{$lib});
+		#my %fq=getlibInput($self->{"LIB"}{$lib});
 		$scripture_cmd .= qq([[ -d $lib ]] || mkdir -p $lib\n);
 		$scripture_cmd .= qq(cd $lib\n);
 		my $tophatbam = $self->{$lib}{"tophatbam"};
@@ -4206,6 +4340,10 @@ sub runMACS ($) {
 		$macs_cmd .= "cd ..\n";
 	}
 	return $macs_cmd;
+}
+
+sub runFseq ($) {
+	
 }
 
 sub runRUM ($) {
@@ -4465,7 +4603,7 @@ sub runCRAC($) {
 	foreach my $lib(@libraries) {
 		$crac_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/$lib));
 		$crac_cmd .= "cd $lib\n";
-		my %fq=getlibSeq($self->{"LIB"}{$lib});
+		my %fq=getlibInput($self->{"LIB"}{$lib});
 		if (exists $fq{1} && exists $fq{2}){
 			for (my $i=0;$i<@{$fq{2}};$i++) {
 				my $fq1=${$fq{1}}[$i];
