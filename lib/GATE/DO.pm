@@ -2181,6 +2181,11 @@ sub runBWA($$) {
 			if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 				$bwa_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
 			}
+			if (exists $self->{"sam2bed"}){
+				my $bed="$1.bed" if ($bam=~/([^\/\s]+)\.bam$/);
+				$bwa_cmd .= qq( [[ -f $bed ]] || \${samtools} view -F4 $bam | $self->{"sam2bed"} -n > $bed\n);
+				push @{$self->{'LIB'}{$lib}{'INPUT'}{'BED'}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$bed";
+			}
 		}
 		if (exists $self->{'setting:UnmappedRealign'})
 		{
@@ -3186,6 +3191,11 @@ sub runGATK ($$) {
 		}
 		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
 			$gatk_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
+		}
+		if (exists $self->{"sam2bed"}){
+			my $bed="$1.bed" if ($bam=~/([^\/\s]+)\.bam$/);
+			$gatk_cmd .= qq( [[ -f $bed ]] || \${samtools} view -F4 $bam | $self->{"sam2bed"} -u -n > $bed\n);
+			push @{$self->{'LIB'}{$lib}{'INPUT'}{'BED'}},$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bed";
 		}
 		$multi++;
 		$gatk_cmd  =~ s/\&*\s*$//;
@@ -4342,8 +4352,38 @@ sub runMACS ($) {
 	return $macs_cmd;
 }
 
+#Fseq v1.84
 sub runFseq ($) {
-	
+	#macs14 -t test.bowtie2.sam -c control.bowtie2.sam --bw 180 --gsize mm --verbose 3 --diag  -B -S --nomodel --name test_vs_control --mfold 10,30 2>macs.log
+	my $self =shift;
+	my $ref = shift;
+	$ref ||= 'ref';
+	if (!exists $self->{"software:macs"}) {
+		return "";
+	}
+	my $fseq=GATE::Error::checkPath($self->{"software:fseq"});
+	my $para=(exists $self->{'setting:fseq'}) ? $self->{'setting:fseq'} : " -of wig -t 8.0 -v ";
+	my $fseq_cmd = qq(echo `date`; echo "run Fseq"\n);
+	$fseq_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$fseq_cmd .= qq(export fseq=$fseq\n);
+	$fseq_cmd .= qq(export para="$para"\n);
+	$fseq_cmd .= qq(cd $self->{"-workdir"}\n);
+	my $fseq_outdir = (exists $self->{"setting:fseq_outdir"}) ? $self->{"setting:fseq_outdir"} : "fseq";
+	$fseq_cmd .= qq([[ -d $fseq_outdir ]] || mkdir $fseq_outdir\n);
+	$fseq_cmd .= qq(cd $fseq_outdir\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries) {
+		$fseq_cmd .= qq(echo `date`; echo "$lib"\n);
+		$fseq_cmd .= qq([[ -d $lib ]] || mkdir $lib\n);
+		$fseq_cmd .= qq(cd $lib\n);
+ #fseq -v -of wig chr1.bed chr2.bed
+ 		if (exists $self->{'LIB'}{$lib}{'INPUT'}{'BED'}){
+ 			$fseq_cmd .= qq(\${fseq} $para );
+ 			$fseq_cmd .= join " ",@{$self->{'LIB'}{$lib}{'INPUT'}{'BED'}};
+ 		} 
+		$fseq_cmd .= "cd ..\n";
+	}
+	return $fseq_cmd;
 }
 
 sub runRUM ($) {

@@ -75,7 +75,7 @@ sub aln($) {
 
 sub var($) {
 	my $self=shift;
-	$self->runGATK();
+	$self->runGATK().$self->runDindel();
 }
 
 sub exp($) {
@@ -95,7 +95,7 @@ sub as($) {
 
 sub peak($) {
 	my $self=shift;
-	$self->runMACS();
+	$self->runMACS().$self->runFseq();
 }
 
 sub plot($) {
