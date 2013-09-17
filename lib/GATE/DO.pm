@@ -2187,7 +2187,7 @@ sub runBWA($$) {
 				push @{$self->{'LIB'}{$lib}{'INPUT'}{'BED'}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$bed";
 			}
 		}
-		if (exists $self->{'setting:UnmappedRealign'})
+		if (exists $self->{'rule:UnmappedRealign'})
 		{
 			if (exists $self->{$lib}{"$ref-bwabam"} && exists $self->{$lib}{"software:sam2reads"} && exists $self->{$lib}{"software:fltfastq2pe"})
 			{
@@ -2973,14 +2973,14 @@ sub runGATK ($$) {
 			$gatk_cmd .= qq($gatk -T RealignerTargetCreator -R \$REFERENCE -I $bam -o $lib.gatk.intervals);
 			if (exists $self->{"database:dbSNP"})
 			{
-				$gatk_cmd .= qq( -know \$dbSNP);
+				$gatk_cmd .= qq( --dbsnp \$dbSNP);
 			}
 			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? qq( -nt $self->{"setting:multithreads"} && ) : "\n";
 			my $realignedbam="$1.realigned.bam" if ($bam=~/([^\/\s]+)\.bam/);
 			$gatk_cmd .= qq($gatk -T IndelRealigner -R \$REFERENCE -I $bam -o $realignedbam -targetIntervals $lib.gatk.intervals -LOD 0.4 -compress 6 -l INFO);
 			if (exists $self->{"database:dbSNP"})
 			{
-				$gatk_cmd .= qq( -know \$dbSNP);
+				$gatk_cmd .= qq( --dbsnp \$dbSNP);
 			}
 			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			if (defined $self->{"software:bamtools"})
@@ -3135,7 +3135,7 @@ sub runGATK ($$) {
 
 ## Genotyping calling
 			$gatk_cmd .= "$gatk -T UnifiedGenotyper -R \$REFERENCE -I $bam -baq CALCULATE_AS_NECESSARY -o $lib.gatk.var.vcf -U -S SILENT -rf BadCigar";
-			#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? qq( -ct $self->{"setting:multithreads"} -nt $self->{"setting:multithreads"} -nct $self->{"setting:multithreads"} && ) : "\n";
+			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? qq( -nt $self->{"setting:multithreads"} -nct $self->{"setting:multithreads"} && ) : "";
 			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			if (exists $self->{"software:tabix"} || $self->{"software:bgzip"})
 			{
@@ -3259,6 +3259,11 @@ sub runPindel ($) {
 #./pindel -f demo/hs_ref_chr20.fa -p demo/COLO-829_20-p_ok.txt -c 20 -o output/ref
 #./pindel -f demo/simulated_reference.fa -i demo/simulated_config.txt -c ALL -o output/simulated
 #./pindel -f <reference.fa> -p <pindel_input> [and/or -i bam_configuration_file] -c <chromosome_name> -o <prefix_for_output_files>
+	
+}
+
+#http://vcftools.sourceforge.net/options.html
+sub runVCFtools ($) {
 	
 }
 
