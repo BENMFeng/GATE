@@ -16,7 +16,7 @@ GATE is an integrative PERL pacakge to conduct application for massive parallel 
 
 User need to setup the software you need, and create an config file for running GATE. GATE would generate a pipeline bash shell script for you to run on Linux server or submit to PBS(qsub/bsub).
 
-Donwload: git clone git://github.com/BENMFeng/GATE.git
+Donwload: git clone https://github.com/BENMFeng/GATE.git
 
 Exmaple: bin/GATE --config=config.txt --prefix=test qc aln var
 
