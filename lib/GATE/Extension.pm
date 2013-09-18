@@ -247,6 +247,30 @@ ggplot\(data=data, aes\(x=log\(coverage\), y=loci, color=prep_type\)\) +
 );
 }
 
+sub run_log ($) {
+	my $self = shift;
+	my $user = `whoami`;chomp $user;
+	my $finger_cmd = qq(finger |grep $user|perl -ne 'if\(\/\(\\d+\\.\\d+\\.\\d+\\.\\d+\)\/\){print "\$1\\n"}' |tail -1);
+	my $login = `$finger_cmd`;chomp $login;
+	my $iphost=$login;
+	if (-e "/sbin/ifconfig") {
+		my $ip_cmd=qq(/sbin/ifconfig -a|grep inet|grep addr|perl -e 'my \%hash;while\(<>\){if\(\/\(\\d+\\.\\d+\\.\\d+\\.\\d+\)\/\){\$hash{\$1}=1;}}open \(IN,"\/etc\/hosts"\);while\(<IN>\){my \@t=split;print "\\\@\$t[1]\\n" if \(exists \$hash{\$t[0]}\)}close IN;' |tail -1);
+		$iphost=`$ip_cmd`;chomp $iphost;
+	}
+	my $info_cmd=qq(uname -a|perl -ne 'if \(\/\(.*\)\\#\/\){print "\$1\\n"}else{print \$_}');
+	my $info=`$info_cmd`;chomp $info;
+	my $des_cmd=qq(lsb_release -a |awk -F "\\t" '\/Description\/{print \$2}') if (-e "/usr/bin/lsb_release");
+	my $description="";
+	if (defined $des_cmd) {
+		$description=`$des_cmd`;chomp $description;
+	}
+	my $date_cmd=qq(date +"\%Y-\%m-\%d \%H:\%M:\%S");
+	my $date=`$date_cmd`;chomp $date;
+	my $cmd=qq(echo "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.7 nightly, May 13th, 2013");
+	system $cmd;
+	my $further_cmd=qq(echo -s "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.7 nightly, May 13th, 2013" | mail -s "GATE running log" binxiaofeng\@gmail.com);
+	system $further_cmd;
+}
 
 sub check_run ($;@) {
 	my $self = shift;

@@ -1372,6 +1372,7 @@ sub runFastQC ($) {
 	$fastqc_cmd .= qq(export fastqc="$fastqc"\n);
 	my $para = (exists $self->{"setting:FastQC"}) ? $self->{"setting:FastQC"} : "" ;
 	my $multirun=GATE::Error::checkPath($self->{"software:multithreads-run"}) if (exists $self->{"software:multithreads-run"});
+	my $multi=0;
 	$fastqc_cmd .= qq(export multirun="$multirun"\n);
 	my $multirun_sh=(-d qq($self->{"-workdir"}/$self->{"setting:qc_outdir"})) ? qq($self->{"-workdir"}/$self->{"setting:qc_outdir"}/runFastQC.$$.sh) : qq($self->{"-workdir"}/runFastQC.$$.sh);
 	if (defined $multirun) {
@@ -1462,6 +1463,7 @@ sub runFastQC ($) {
 		}
 		$fastqc_cmd_multi =~ s/[\&\s]+$//;
 		$fastqc_cmd_multi =~ s/[\&\s]+$//;
+		$multi++;
 		if ($multi % $self->{"setting:multithreads"}!=0){
 			$fastqc_cmd_multi .= " &\n";
 		} else {
@@ -1484,7 +1486,7 @@ sub runFastQC ($) {
 		$fastqc_cmd_multi.="\n";
 		$fastqc_cmd_multi.= print_check_process('fastqc');
 		if (defined $multirun) {
-			my $multirun_cmd = $fastqc_cmd_multi_head;
+			my $multirun_cmd = $fastqc_cmd_head;
 			$multirun_cmd .= qq(${multirun} $multirun_sh -nt $self->{"setting:multithreads"}\n);
 			$multirun_cmd .= print_check_process('fastqc','$multirun_sh');
 			return $multirun_cmd;
@@ -3264,6 +3266,11 @@ sub runPindel ($) {
 
 #http://vcftools.sourceforge.net/options.html
 sub runVCFtools ($) {
+	
+}
+
+#http://pyvcf.readthedocs.org/en/latest/
+sub runPyVCF ($) {
 	
 }
 

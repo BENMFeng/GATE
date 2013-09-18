@@ -278,6 +278,7 @@ die $podtext,"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
 $Workdir ||= "./";
 $Prefix ||= "pipeline";
 my $gate=GATE->new('-config',$Configure,'-workdir',$Workdir);
+$gate->GATE::Extension::run_log();
 #print qq(chdir $gate->{'-workdir'}\n);
 $gate->parseDir();
 $gate->parseConfig();
