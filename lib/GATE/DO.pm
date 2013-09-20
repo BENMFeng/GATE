@@ -41,6 +41,7 @@ sub parseConfig($) {
 	my ($name,$index,$barcode,$lib,$mergepe)=("","","","",""); 
 	my %RG;
 	my %countSample;
+	my $softtool="";
 	open (IN,$file) || die "Can't open config file:$file for reading\n";
 	while(<IN>) {
 		chomp;
@@ -104,7 +105,7 @@ sub parseConfig($) {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($rule,$condition)=($1,$2);
 				if ($rule =~ /skip/i) {
-					my @cond=split /\s+/,$condition;
+					my @cond=split "\s+",$condition;
 					map{$self->{"$name:$rule"}{$_}=1}@cond;
 				} else {
 					$self->{"$name:$rule"}=$condition;
@@ -113,7 +114,15 @@ sub parseConfig($) {
 		} else {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($lib,$path)=($1,$2);
-				if ($name =~ /database/ || $name =~ /software/) {
+				if ($name =~ /software/) {
+					if ($_=~/^[\s\=]+)\=([^\=]+)/) {
+						$path=GATE::Error::checkPath($path); 
+						$self->{"$name:$lib"} = $path;
+					} elseif ($_=~/^\s+[\s\=]+)\=([^\=]+)/) {
+						$self->{"setting:$lib:$1"} = $2;
+					}
+				}
+				if ($name =~ /database/) {
 					$path=GATE::Error::checkPath($path); 
 					$self->{"$name:$lib"} = $path;
 				}
@@ -3516,6 +3525,7 @@ sub runVarScan ($$) {
 	$varscan_cmd .= qq(cd \${vardir}\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
 	my $multi=0;
+	my %libbam=();
 	foreach my $lib(@libraries) {
 		$varscan_cmd .= qq([[ -d $lib ]] || mkdir -p $lib\n) if (!-d qq($self->{"-workdir"}/$vardir/$lib));
 		$varscan_cmd .= qq(cd $lib);
@@ -3529,12 +3539,61 @@ sub runVarScan ($$) {
 		} elsif (exists $self->{"$ref-soapbam"}) {
 			$bam = join " ",@{$self->{"$ref-soapbam"}};
 		}
-		$varscan_cmd = qq(\${samtools} mpileup -f \$REFERENCE $bam | \${VarScan} pileup2snp);
+		$varscan_cmd .= qq(\${samtools} mpileup -f \$REFERENCE $bam > $lib.mpileup\n);
+		if ($lib=~/(\S+)\-(tumor)/ || $lib=~/(\S+)\-(normal)/) {
+			$libbam{$1}{$2}="$lib.mpileup";
+			next;
+		}
+		$varscan_cmd .= qq(\${VarScan} mpileup2snp $lib.mpileup > $lib.varscan.snp && );
+		$varscan_cmd .= qq(\${VarScan} filter $lib.varscan.snp );
+		if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
+			$varscan_cmd = " &\n";
+		} else {
+			$varscan_cmd = " \n";
+		}
+		$varscan_cmd .= qq(\${VarScan} mpileup2indel $lib.mpileup > $lib.varscan.indel && );
+		$varscan_cmd .= qq(\${VarScan} filter $lib.varscan.indel );
+		if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
+			$varscan_cmd = " &\n";
+		} else {
+			$varscan_cmd = " \n";
+		}
+		$varscan_cmd .= qq(\${VarScan} mpileup2cns $lib.mpileup > $lib.varscan.cns );
+		if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
+			$varscan_cmd = " &\n";
+		} else {
+			$varscan_cmd = " \n";
+		}
 		$multi++;
 		$varscan_cmd .= qq(cd ../);
 	}
+	$varscan_cmd .= print_check_process("samtools","mpileup");
+	if (keys %libbam>0){
+		foreach my $lib(keys %libbam) {
+			$varscan_cmd .= qq(cd $lib);
+			my $tumor_pileup = $libbam{$lib}{"tumor"};
+			my $normal_pileup= $libbam{$lib}{"normal"};
+			$varscan_cmd .= qq(\${VarScan} somatic $nomal_pileup $tumor_pileup $lib.somatic.var && );
+			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.somatic.var );
+			if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
+				$varscan_cmd = " &\n";
+			} else {
+				$varscan_cmd = " \n";
+			}
+			$varscan_cmd .= qq(\${VarScan} copynumber $nomal_pileup $tumor_pileup $lib.cnv.var && );
+			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.cnv.var );
+			if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
+				$varscan_cmd = " &\n";
+			} else {
+				$varscan_cmd = " \n";
+			}
+			$multi++;
+			$varscan_cmd .= qq(cd ../);
+		}
+	}
 	$varscan_cmd .= qq(cd ../);
-	retur $varscan_cmd;
+	$varscan_cmd .= print_check_process("VarScan");
+	return $varscan_cmd;
 }
 
 sub runCRISP ($) {
