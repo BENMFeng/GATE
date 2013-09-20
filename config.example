@@ -26,6 +26,9 @@ RNA-SeQC=./software/RNA-SeQC/RNA-SeQC_v1.1.7.jar
 
 ## ALN software
 bwa=/usr/local/bin/bwa
+bowtie=/usr/local/bin/bowtie2
+soap=/usr/local/bin/soap
+maq=/usr/local/bin/maq
 
 # BAMtools
 bamtools=/usr/local/bin/bamtools
@@ -34,11 +37,13 @@ bamtools=/usr/local/bin/bamtools
 samtools=/usr/local/bin/samtools
 picard=/usr/local/bin/picard-1.82.jar
 gatk=/usr/local/bin/GenomeAnalysisTK.jar
+VarScan=/usr/local/bin/VarScan.jar
+## sub-setting for VarScan
+	filter=--min-coverage 6 --min-reads2 3 --min-reads2 5e-02
 
 ## EXP software
-bowtie=/usr/local/bin/bowtie2
-cufflinks=/usr/local/bin/cufflinks
 tophat=/usr/local/bin/tophat2
+cufflinks=/usr/local/bin/cufflinks
 
 ## AS software
 AlternativeSplicing=./bin/AlternativeSplicing.jar
@@ -79,10 +84,15 @@ clean=true
 multimode=yes
 
 [LIB]
+#Label
 LB=A
+#Sample ID
 ID=A
+#Sample speice
 SM=hs
+#Sequencing platform
 PL=Illumina
+#Sequencing instrument/unit
 PU=hiseq2000
 fq1=./01.data/A-1.fq.gz
 fq2=../01.data/A-2.fq.gz

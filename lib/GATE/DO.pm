@@ -117,9 +117,10 @@ sub parseConfig($) {
 				if ($name =~ /software/) {
 					if ($lib=~/^([\s\=]+)/) {
 						$path=GATE::Error::checkPath($path); 
+						$softtool=$lib;
 						$self->{"$name:$lib"} = $path;
 					} elsif ($lib=~/^\s+([\s\=]+)/) {
-						$self->{"setting:$lib:$1"} = $2;
+						$self->{"setting:$softtool:$1"} = $2;
 					}
 				}
 				if ($name =~ /database/) {
@@ -166,56 +167,6 @@ sub getlibInput ($) {
 		}
 	}
 	return %Input;
-}
-
-sub correctJavaCmd
-{
-	my ($tools,$heap,$Djavaio)=@_;
-	my $cmd="java";
-	my $init="40m";
-	if (defined $tools && $tools !~ /^java/ && $tools !~ /\-jar/)
-	{
-		if (defined $heap)
-		{
-			if ($heap=~/(\d+)(\w+)/) {
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10)."$unit";
-			} elsif ($heap=~/(\d+)$/) {
-				$heap.="m";
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10).$unit;
-			}
-			$init="40m" if ($init =~ /^0/);
-			$cmd.=" -Xms$init -Xmx$heap";
-		}
-		if (defined $Djavaio)
-		{
-			$cmd.=" -Djava.io.tmpdir=$Djavaio";
-		}
-		$cmd.=" -jar $tools";
-	}
-	else
-	{
-		$cmd=$tools;
-		if (defined $heap && $cmd !~ /\-Xmx/)
-		{
-			if ($heap=~/(\d+)(\w+)/) {
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10)."unit";
-			} elsif ($heap=~/(\d+)$/) {
-				$heap.="m";
-				my ($mem,$unit)=($1,$2);
-				$init=int($mem/10).$unit;
-			}
-			$init="40m" if ($init =~ /^0/);
-			$cmd=~s/java/java\ -Xms$init \-Xmx$heap\ /;
-		}
-		if (defined $Djavaio && $cmd !~ /\-Djava/)
-		{
-			$cmd=~s/\-jar/\-Djava\.io\.tmpdir\=$Djavaio\ \-jar/;
-		}
-	}
-	return $cmd;
 }
 
 sub checkFileFormat ($) {
@@ -1913,7 +1864,7 @@ sub runBWA($$) {
 		$picard=GATE::Error::checkPath($self->{"software:picard"});
 		my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 		$bwa_cmd .= qq(export picard="$picard"\n);
-		$picard = correctJavaCmd($picard,"\${heap}");
+		$picard = GATE::Error:correctJavaCmd($picard,"\${heap}");
 		$FixMateInformation=(exists $self->{"software:FixMateInformation"})?$self->{"software:FixMateInformation"}:qq($picardpath/FixMateInformation.jar);
 	}
 	
@@ -2051,7 +2002,7 @@ sub runBWA($$) {
 					$bwa_cmd .= qq(export FixMateInformation="$FixMateInformation"\n);
 					#$bwa_cmd .= qq(mkdir -p ./tmp_fixmate\n);
 					#$bwa_cmd .= qq(export tmp_fixmate="./tmp_fixmate"\n);
-					$FixMateInformation=correctJavaCmd($FixMateInformation,"\${heap}","./tmp_fixmate");
+					$FixMateInformation=GATE::Error:correctJavaCmd($FixMateInformation,"\${heap}","./tmp_fixmate");
 					my $FixMateInformationPara=(exists $self->{"setting:FixMateInformation"})? $self->{"setting:FixMateInformation"}:"SO=coordinate CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT";
 					my $fxmtbam=$bam;
 					$fxmtbam=~s/bam$/fxmat\.bam/;
@@ -2355,7 +2306,7 @@ sub runBowtie($$) {
 				$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
 				my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
 				my $MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
-				$MarkDuplicates=correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
+				$MarkDuplicates=GATE::Error:correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
 				my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 				my $merge_bam=join " INPUT=",@bam;
 				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
@@ -2846,20 +2797,20 @@ sub runGATK ($$) {
 		$picard=$self->{"software:picard"};
 		$picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 		$gatk_cmd .= qq(export picard="$picard"\n);
-		$picard = correctJavaCmd($picard,"\${heap}");
+		$picard = GATE::Error:correctJavaCmd($picard,"\${heap}");
 		$MergeSamFiles=(exists $self->{"software:MergeSamFiles"})?$self->{"software:MergeSamFiles"}:qq($picardpath/MergeSamFiles.jar);
 		$gatk_cmd .= qq(export MergeSamFiles="$MergeSamFiles"\n);
-		$MergeSamFiles=correctJavaCmd($MergeSamFiles,"\${heap}","./tmp_merge");
+		$MergeSamFiles=GATE::Error:correctJavaCmd($MergeSamFiles,"\${heap}","./tmp_merge");
 		$MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
 		$gatk_cmd .= qq(export MarkDuplicates="$MarkDuplicates"\n);
-		$MarkDuplicates=correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
+		$MarkDuplicates=GATE::Error:correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
 		if (defined $picard) {
 			my $dict=GATE::Error::checkIndex('picard',$reference);
 			if ($dict==0) {
 				my $CreateSequenceDictionary="";
 				my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$CreateSequenceDictionary=(exists $self->{"software:CreateSequenceDictionary"})?$self->{"software:CreateSequenceDictionary"}:qq($picardpath/CreateSequenceDictionary.jar);
-				$CreateSequenceDictionary=correctJavaCmd($CreateSequenceDictionary,"\${heap}");
+				$CreateSequenceDictionary=GATE::Error:correctJavaCmd($CreateSequenceDictionary,"\${heap}");
 				my $ref_prefix=$1 if ($reference=~/([^\s]+)\.fa/i);
 				$gatk_cmd .= "$CreateSequenceDictionary R=\$REFERENCE O=$ref_prefix\.dict CREATE_INDEX=true CREATE_MD5_FILE=true TRUNCATE_NAMES_AT_WHITESPACE=true VALIDATION_STRINGENCY=STRICT\n";
 			}
@@ -2871,7 +2822,7 @@ sub runGATK ($$) {
 		$gatk_cmd .= qq(export bamtools\="$bamtools"\n);
 	}
 	my $gatk=GATE::Error::checkPath($self->{"software:gatk"}) if (exists $self->{"software:gatk"});
-	$gatk=correctJavaCmd($gatk,$heap,"./tmp_gatk");
+	$gatk=GATE::Error:correctJavaCmd($gatk,$heap,"./tmp_gatk");
 	$gatk_cmd .= qq(export gatk="$gatk"\n);
 	if (exists $self->{"database:dbSNP"})
 	{
@@ -3077,14 +3028,14 @@ sub runGATK ($$) {
 				my $AnalyzeCovariates;
 				if (exists $self->{"software:AnalyzeCovariates"})
 				{
-					$AnalyzeCovariates=correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
+					$AnalyzeCovariates=GATE::Error:correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
 				}
 				else
 				{
 					$AnalyzeCovariates=GATE::Error::checkPath("$1/resource/AnalyzeCovariates.jar") if ($self->{"software:gatk"}=~/(\S+)\/[^\/\s]+$/);
 					if (defined $AnalyzeCovariates && -f $AnalyzeCovariates)
 					{
-						$AnalyzeCovariates=correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
+						$AnalyzeCovariates=GATE::Error:correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
 					}
 				}
 				if (defined $AnalyzeCovariates)
@@ -3512,7 +3463,7 @@ sub runVarScan ($$) {
 	my $heap = $self->{"setting:heap"};
 	$varscan_cmd .= qq(export heap="$heap"\n);
 	my $varscan=GATE::Error::checkPath($self->{"software:VarScan"});
-	$varscan=correctJavaCmd($varscan,"\${heap}","./tmp_rmdup");
+	$varscan=GATE::Error:correctJavaCmd($varscan,"\${heap}","./tmp_rmdup");
 	my $samtools=GATE::Error::checkPath($self->{"software:samtools"});
 	$varscan_cmd .= GATE::ALIAS::general_header('REFERENCE',$ref,'varscan',$varscan,'samtools',$samtools);
 	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
@@ -3573,14 +3524,14 @@ sub runVarScan ($$) {
 			my $tumor_pileup = $libbam{$lib}{"tumor"};
 			my $normal_pileup= $libbam{$lib}{"normal"};
 			$varscan_cmd .= qq(\${VarScan} somatic $normal_pileup $tumor_pileup $lib.somatic.var && );
-			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.somatic.var );
+			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.somatic.var --output-file $lib.somatic.flt.var );
 			if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
 				$varscan_cmd = " &\n";
 			} else {
 				$varscan_cmd = " \n";
 			}
 			$varscan_cmd .= qq(\${VarScan} copynumber $normal_pileup $tumor_pileup $lib.cnv.var && );
-			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.cnv.var );
+			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.cnv.var --output-file $lib.cnv.flt.var );
 			if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
 				$varscan_cmd = " &\n";
 			} else {
@@ -4513,7 +4464,7 @@ sub runScripture ($) {
 	my $heap = $self->{"setting:heap"};
 	$scripture_cmd .= qq(export heap="$heap"\n);
 	my $scripture = GATE::Error::checkPath($self->{"software:scripture"}) if (exists $self->{"software:scripture"});
-	$scripture=correctJavaCmd($scripture,$heap,"./tmp_scripture");
+	$scripture=GATE::Error:correctJavaCmd($scripture,$heap,"./tmp_scripture");
 	my $para = $self->{"setting:scripture"} if (exists $self->{"setting:scripture"});
 	$scripture_cmd .= qq(export scripture="$scripture"\n);
 	$scripture_cmd .= qq(export para="$para"\n);
