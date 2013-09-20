@@ -19,15 +19,15 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1d,09-15-2013";
-package GATE::Element;
-#package GATE::Extension;
-use GATE::ALIAS;
-use GATE::Error;
+$VERSION = "1.1e,09-20-2013";
 use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
 use lib "$FindBin::Bin/../lib";  ## Bin live in the lib
 use File::Basename qw(basename dirname);
 use Cwd;
+package GATE::Element;
+#package GATE::Extension;
+use GATE::ALIAS;
+use GATE::Error;
 
 #########################################################
 #                                                       #
@@ -2404,6 +2404,12 @@ sub runSOAP ($$) {
 	my $soap_cmd = qq(echo `date`; echo "run SOAPaligner"\n);
 	$soap_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	my $soap = GATE::Error::checkPath($self->{"software:soap"});
+	my $msort = GATE::Error::checkPath($self->{"software:msort"}) if (exists $self->{"software:msort"});
+	if (defined $msort){
+		$soap_cmd .= qq(export msort="$msort"\n)
+		$soap_cmd .= qq(alias sortbychr=$msort -k '2{1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y MT chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM},3n');
+	}
+	
 	my $soap_path = $1 if (defined $soap && $soap=~/(\S+)\/soap/);
 	my $builder;
 	if (defined $self->{"software:2bwt-builder"}) {
@@ -2432,6 +2438,7 @@ sub runSOAP ($$) {
 	$soap_cmd .= "[[ -d $soap_outdir ]] || mkdir $soap_outdir\n" if (!-d qq($self->{"-workdir"}/$soap_outdir));
 	$soap_cmd .= "cd $soap_outdir\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
+	my @soap=();
 	my @bam=();
 	foreach my $lib(@libraries) {
 		$soap_cmd .= "[[ -d $lib ]] || mkdir $lib\n" if (!-d qq($self->{"-workdir"}/$soap_outdir/$lib));
@@ -2463,6 +2470,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.$k.paired.soap -2 $lib.$k.unpaired.soap -m $m -x $x \{$soappara}\n);
+					push @soap,("$lib.$k.paired.soap","$lib.$k.unpaired.soap");
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.paired.soap > $lib.$k.paired.sam\n);
@@ -2486,7 +2494,8 @@ sub runSOAP ($$) {
 							$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 						}
 					}
-					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.pair.soap -2 $lib.single.soap -m $m -x $x \{$soappara}\n);
+					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.pair.soap -2 $lib.unpaired.soap -m $m -x $x \{$soappara}\n);
+					push @soap,("$lib.pair.soap","$lib.unpaired.soap");
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.paired.soap > $lib.paired.sam\n);
@@ -2519,6 +2528,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -D \${REFERENCE} -o $lib.$k.single.soap \{$soappara}\n);
+					push @soap,"$lib.$k.single.soap";
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.single.soap > $lib.$k.single.sam\n);
@@ -2541,6 +2551,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -D \${REFERENCE} -o $lib.single.soap \{$soappara}\n);
+					push @soap,"$lib.single.soap";
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.single.soap > $lib.single.sam\n);
@@ -2551,40 +2562,56 @@ sub runSOAP ($$) {
 				}
 			}
 			if (@bam>1) {
-				my $merge_bam="";
-				my $MergeSamFiles;
-				if (exists $self->{"software:picard"}) {
-					$MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
-					$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
-					if (defined $MergeSamFiles && $MergeSamFiles ne "") {
-						my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
-						$merge_bam=join " INPUT\=",@bam;
-						$soap_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam\n";
-						if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
-						{
-							$soap_cmd .= qq(rm -rf ./tmp_merge);
-							$soap_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
+				if (exists $self->{"rule:soapmerge"}) {
+					my $merge_bam="";
+					my $MergeSamFiles;
+					if (exists $self->{"software:picard"}) {
+						$MergeSamFiles="$1/MergeSamFiles.jar" if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
+						$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
+						if (defined $MergeSamFiles && $MergeSamFiles ne "") {
+							my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
+							$merge_bam=join " INPUT\=",@bam;
+							$soap_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam\n";
+							if (exists $self->{"rule:Clean"} && GATE::Error::boolean($self->{"rule:Clean"})==1 )
+							{
+								$soap_cmd .= qq(rm -rf ./tmp_merge);
+								$soap_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
+							}
+							${$self->{"$ref-soapbam"}}[0]="$workdir/$soap_outdir/$lib/$lib.merge.bam";
 						}
-						$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$lib.merge.bam";
+					} 
+					else {
+						$merge_bam=join " ",@bam;
+						$soap_cmd .=  qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" > $lib.inh.sam);
+	
+						foreach my $soapbam(@bam)
+						{
+							$soap_cmd .=  qq(\${samtools} view -H $soapbam |grep "^\@RG" >> $lib.inh.sam\n);
+						}
+						$soap_cmd .=  qq(\${samtools} view -H $bam[0] |grep "^\@PG" >> $lib.inh.sam);
+	
+						$soap_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
+						${$self->{"$ref-soapbam"}}[0]="$workdir/$soap_outdir/$lib/$lib.merge.bam";
 					}
-				} 
+				}
 				else {
-					$merge_bam=join " ",@bam;
-					$soap_cmd .=  qq(\${samtools} view -H $bam[0] |grep -v "^\@RG" | grep -v "^\@PG" > $lib.inh.sam);
-
-					foreach my $soapbam(@bam)
-					{
-						$soap_cmd .=  qq(\${samtools} view -H $soapbam |grep "^\@RG" >> $lib.inh.sam\n);
+					foreach my $BAM(@bam){
+						push @{$self->{"$ref-soapbam"}}="$workdir/$soap_outdir/$lib/$BAM";
 					}
-					$soap_cmd .=  qq(\${samtools} view -H $bam[0] |grep "^\@PG" >> $lib.inh.sam);
-
-					$soap_cmd .=  "\${samtools} merge -f -nr -h $lib.inh.sam $lib.merge.bam $merge_bam";
-					$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$lib.merge.bam";
 				}
 			} else {
-				$self->{"$ref-bam"}="$workdir/$soap_outdir/$lib/$bam[0]";
+				${$self->{"$ref-soapbam"}}[0]="$workdir/$soap_outdir/$lib/$bam[0]";
 			}
 			
+		}
+		if (@soap>0) {
+			my $soap_merge = "cat ",join " ",@soap;
+			if (defined $msort) {
+				" | sortbychr > $lib.all.soap\n";
+			} else {
+				" | sort -n -k 2,3 > $lib.all.soap\n";
+			}
+			${$self->{"$ref-soap"}}="$workdir/$soap_outdir/$lib/$lib.all.soap";
 		}
 		$soap_cmd .= "cd ../\n";
 	}
@@ -2720,6 +2747,10 @@ sub runTopHat($$) {
 	}
 	$tophat_cmd .= "cd ..\n";
 	return ($tophat_cmd);
+}
+
+sub runMOSAIK ($) {
+	
 }
 
 sub runGSNAP ($) {
@@ -3209,6 +3240,27 @@ sub runGATK ($$) {
 	return $gatk_cmd;
 }
 
+sub runSnpEff ($) {
+#"A program for annotating and predicting the effects of single nucleotide polymorphisms,
+#SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", 
+#Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 
+#2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]
+#java -Xmx4g -jar snpEff.jar dm5.34 s.vcf > s.eff.vcf
+#java -Xmx4g -jar snpEff.jar eff -i bed BDGP5.69 chipSeq_peaks.bed 
+#java -Xmx4g -jar snpEff.jar eff -v -interval db/epigenome/BI_Pancreatic_Islets_H3K4me3.peaks.bed GRCh37.71 test.vcf > test.eff.vcf 
+#java -Xmx4g -jar snpEff.jar -v -nextprot GRCh37.71 test.vcf > test.eff.vcf
+#java -Xmx4g -jar snpEff.jar -v -motif GRCh37.71 test.vcf > test.eff.vcf
+#java -jar snpEff.jar databases
+#java -jar snpEff.jar build -gff3 -v dm5.31
+#java -jar snpEff.jar build -refSeq -v hg19 
+#java -Xmx20g -jar snpEff.jar build -v GRCh37.70 2>&1 | tee GRCh37.70.build
+	my $self=shift;
+}
+
+sub runSnpSift ($) {
+	my $self=shift;
+}
+
 sub runDindel ($) {
 #/usr/local/bin/dindel --analysis getCIGARindels --bamFile realigned.baq.bam --outputFile dindel_output --ref reference.fa
 #python /usr/local/bin/makeWindows.py --inputVarFile dindel_output.variants.txt --windowFilePrefix realign_windows --numWindowsPerFile 1000
@@ -3279,6 +3331,7 @@ sub runiSAAC ($) {
 	
 }
 
+#SNVer v0.4.1
 sub runSNVer ($) {
 ##a) For individual sequencing data
 # /path/to/java -jar /path/to/SNVer-0.2.0/SNVerIndividual.jar \
@@ -3293,22 +3346,17 @@ sub runSNVer ($) {
 ## Annotation
 #/path/to/annovar/convert2annovar.pl -format vcf4 pe.vcf > input
 #/path/to/annovar/summarize_annovar.pl --verdbsnp 132 --buildver hg19 \
-#--outfile sum input /path/to/humandb 	
-}
+#--outfile sum input /path/to/humandb
 
-sub runSnpEff ($) {
-#"A program for annotating and predicting the effects of single nucleotide polymorphisms,
-#SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", 
-#Cingolani P, Platts A, Wang le L, Coon M, Nguyen T, Wang L, Land SJ, Lu X, Ruden DM. Fly (Austin). 
-#2012 Apr-Jun;6(2):80-92. PMID: 22728672 [PubMed - in process]
+#java -jar SNVerPool.jar -i input_directory -r reference_file
+#	[-c pool_info_file | -n number_of_haploids] [options] 
 	my $self=shift;
+	my $ref =shift;
+	$ref  ||='ref';
 }
 
-sub runSnpSift ($) {
-	my $self=shift;
-}
-
-sub runSOAPsnp($) {
+#SOAPsnp v1.03 , 05-25-2009
+sub runSOAPsnp($$) {
 #soapsnp -B aln.bam -d reference.fa -o cns -r 0.0005 -e 0.001 -u -L 150 -2 -Q J -s dbSNP -T region.out -m
 #The dbSNP file consist of a lot of lines like this one:
 #	chr1    201979756       1       1       0       0.161   0       0       0.839   rs568
@@ -3319,26 +3367,78 @@ sub runSOAPsnp($) {
 #	not have allele frequency information, the frequency information can be arbitrarily determined as 
 #	any positive values, which only imply what alleles have already been deposited in the database.
 	my $self=shift;
-}
-
-sub checkdbSNP {
-	my $dbSNP = shift;
-	my $count=0;
-	open (IN,$dbSNP) || die $!;
-	while(<IN>){
-		next if (/^\#/ || /^\s+/);
-		my @t=split "\t+", $_;
-		for (my $i=1;$i<$#t-1;$i++){
-			$count++ if (/^\d+/);
+	my $ref =shift;
+	$ref  ||='ref';
+	my $soapsnp = $self->{"software:soapsnp"};
+	if (!exists $self->{"software:soapsnp"} || !defined $self->{"software:soapsnp"}) {
+		return "";
+	}
+	my $soapsnp_cmd = qq(echo `date`; echo "run SOAPsnp"\n);;
+	my $heap = $self->{"setting:heap"};
+	$soapsnp_cmd .= qq(export heap="$heap"\n);
+	my $para = (exists $self->{"setting:soapsnp"}) ? $self->{"setting:soapsnp"} : " -r 0.0005 -e 0.001 -t -u -L 150 -2";
+	$soapsnp_cmd .= qq(export para="$para"\n);
+	my $soapsnp=GATE::Error::checkPath($self->{"software:soapsnp"});
+	my $samtools=GATE::Error::checkPath($self->{"software:samtools"});
+	$soapsnp_cmd .= GATE::ALIAS::general_header('REFERENCE',$ref,'soapsnp',$soapsnp,'samtools',$samtools);
+	my $dbSNP=$self->{"database:dbSNP"} if (exists $self->{"database:dbSNP"});
+	if (exists $self->{"database:dbSNP"})
+	{
+		$soapsnp_cmd .=qq(export dbSNP="$self->{"database:dbSNP"}"\n);
+	}
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
+	my $vardir=GATE::Error::checkPath($self->{"setting:var_outdir"});
+	$soapsnp_cmd .= qq(export workdir="$workdir"\n);
+	$soapsnp_cmd .= qq(export vardir="$vardir"\n);
+	$soapsnp_cmd .= qq(cd \${workdir}\n);
+	$soapsnp_cmd .= qq([[ -d \${vardir} ]] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
+	$soapsnp_cmd .= qq(cd \${vardir}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $multi=0;
+	foreach my $lib(@libraries) {
+		$soapsnp_cmd .= qq([[ -d $lib ]] || mkdir -p $lib\n) if (!-d qq($self->{"-workdir"}/$vardir/$lib));
+		$soapsnp_cmd .= qq(cd $lib);
+		if (exists $self->{"$ref-soap"}) {
+			$soapsnp_cmd .= qq(\${soapsnp} -i $self->{"$ref-soap"} -d \$REFERENCE -o $prefix.cns -T $prefix.region.out \${para} );
+			if (exists $self->{"database:dbSNP"} && GATE::Error::checkdbSNP($self->{"database:dbSNP"})) {
+				$soapsnp_cmd .= " -s \${dbSNP}";
+			}
+			if (exists $self->{'setting:multithreads'} && $multi % $self->{'setting:multithreads'} != 0 ) {
+				$soapsnp_cmd .= qq( \& );
+			} else {
+				$soapsnp_cmd .= "\n";
+			}
+		} else {
+			my @bam = "";
+			if (exists $self->{"$ref-bam"}) {
+				$bam[0] = $self->{"$ref-bam"};
+			} elsif (exists $self->{"$ref-bwabam"}) {
+				@bam = @{$self->{"$ref-bwabam"}};
+			} elsif (exists $self->{"$ref-bowtiebam"}) {
+				@bam = @{$self->{"$ref-bowtiebam"}};
+			} elsif (exists $self->{"$ref-soapbam"}) {
+				@bam = @{$self->{"$ref-soapbam"}};
+			}
+			if (@bam>0) {
+				foreach my $BAM (@bam) {
+					my $prefix = "$1.bam" if ($BAM=~/([^\/\.]+)\.bam$/);
+					$soapsnp_cmd .= qq(\${soapsnp} -B $BAM -d \$REFERENCE -o $prefix.cns -T $prefix.region.out \${para} );
+					if (exists $self->{"database:dbSNP"} && GATE::Error::checkdbSNP($self->{"database:dbSNP"})) {
+						$soapsnp_cmd .= " -s \${dbSNP}";
+					}
+					if (exists $self->{'setting:multithreads'} && $multi % $self->{'setting:multithreads'} != 0 ) {
+						$soapsnp_cmd .= qq( \& );
+					} else {
+						$soapsnp_cmd .= "\n";
+					}
+					$multi++;
+				}
+				$soapsnp_cmd .= qq(cd ../);
+			}
 		}
-		last;
 	}
-	close IN;
-	if ($count==8){
-		return 1;
-	} else {
-		return 0;
-	}
+	$soapsnp_cmd .= qq(cd ../);
+	retur $soapsnp_cmd;	
 }
 
 sub runSOAPsnv ($) {
@@ -3359,6 +3459,82 @@ sub runSOAPsv ($) {
 
 sub runBreakDancer ($) {
 	
+}
+
+sub runVarScan ($$) {
+#VarScan Documentation (v2.2.3 and later)
+#	USAGE: java -jar VarScan.jar  [COMMAND] [OPTIONS]
+#	COMMANDS:
+
+#	Single-sample Calling:
+#	pileup2snp [pileup file]
+#	pileup2indel [pileup file]
+#	pileup2cns [pileup file]
+
+#	Multi-sample Calling:
+#	mpileup2snp [mpileup file]
+#	mpileup2indel [mpileup file]
+#	mpileup2cns [mpileup file]
+
+#	Tumor-normal Comparison:
+#	somatic	[normal pileup] [tumor pileup] or [normal-tumor mpileup]
+#	copynumber [normal pileup] [tumor pileup] or [normal-tumor mpileup]
+
+#	Variant Filtering:
+#	filter [variants file]
+#	somaticFilter [mutations file]
+
+#	Utility Functions:
+#	limit [variants file] 
+#	readcounts [pileup file]
+#	compare	[file1] [file2]	
+
+#samtools mpileup -f [reference sequence] [BAM file(s)] >myData.mpileup
+#One sample:
+#samtools mpileup -f reference.fasta myData.bam | java -jar VarScan.v2.2.jar pileup2snp
+#Multiple samples:
+#samtools mpileup -f reference.fasta sample1.bam sample2.bam | java -jar VarScan.v2.2.jar pileup2snp
+	my $self=shift;
+	my $ref=shift;
+	$ref ||= 'ref';
+	if (!exists $self->{"software:VarScan"} || !defined $self->{"software:VarScan"}) {
+		return "";
+	}
+	my $varscan_cmd = qq(echo `date`; echo "run VarScan"\n);;
+	my $heap = $self->{"setting:heap"};
+	$varscan_cmd .= qq(export heap="$heap"\n);
+	my $varscan=GATE::Error::checkPath($self->{"software:VarScan"});
+	$varscan=correctJavaCmd($varscan,"\${heap}","./tmp_rmdup");
+	my $samtools=GATE::Error::checkPath($self->{"software:samtools"});
+	$varscan_cmd .= GATE::ALIAS::general_header('REFERENCE',$ref,'varscan',$varscan,'samtools',$samtools);
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
+	my $vardir=GATE::Error::checkPath($self->{"setting:var_outdir"});
+	$varscan_cmd .= qq(export workdir="$workdir"\n);
+	$varscan_cmd .= qq(export vardir="$vardir"\n);
+	$varscan_cmd .= qq(cd \${workdir}\n);
+	$varscan_cmd .= qq([[ -d \${vardir} ]] || mkdir -p \${vardir}\n) if (!-d qq($self->{"-workdir"}/$vardir));
+	$varscan_cmd .= qq(cd \${vardir}\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+	my $multi=0;
+	foreach my $lib(@libraries) {
+		$varscan_cmd .= qq([[ -d $lib ]] || mkdir -p $lib\n) if (!-d qq($self->{"-workdir"}/$vardir/$lib));
+		$varscan_cmd .= qq(cd $lib);
+		my $bam = "";
+		if (exists $self->{"$ref-bam"}) {
+			$bam = $self->{"$ref-bam"};
+		} elsif (exists $self->{"$ref-bwabam"}) {
+			$bam = join " ",@{$self->{"$ref-bwabam"}};
+		} elsif (exists $self->{"$ref-bowtiebam"}) {
+			$bam = join " ",@{$self->{"$ref-bowtiebam"}};
+		} elsif (exists $self->{"$ref-soapbam"}) {
+			$bam = join " ",@{$self->{"$ref-soapbam"}};
+		}
+		$varscan_cmd = qq(\${samtools} mpileup -f \$REFERENCE $bam | \${VarScan} pileup2snp);
+		$multi++;
+		$varscan_cmd .= qq(cd ../);
+	}
+	$varscan_cmd .= qq(cd ../);
+	retur $varscan_cmd;
 }
 
 sub runCRISP ($) {
@@ -3714,7 +3890,8 @@ sub runVelvetOases ($) {
 				my $reads1=${$read{1}}[$i];
 				my $reads2=${$read{2}}[$i];
 				my $format=$self->checkFileFormat($reads1);
-				my $reads=shuffleSequences($reads1,$reads2,$format);
+				my $reads="";
+				$velvet_cmd .= shuffleSequences($reads1,$reads2,$reads,$format);
 				$input.="-shortPaired --".$self->checkFileFormat($reads)." $reads";
 			}
 		}
@@ -3734,7 +3911,19 @@ sub runVelvetOases ($) {
 }
 
 sub shuffleSequences ($) {
-	
+	my ($reads1,$reads2,$output,$format)=@_;
+	$$output=$1 if ($reads1=~/([^\/\.]+)\.\w+$/);
+	my $cmd = "";
+	if ($format =~ /fastq\.gz$/) {
+		$cmd=qq();
+	} elsif ($format =~ /fasta\.gz$/) {
+		$cmd=qq();
+	} elsif ($format =~ /fastq$/) {
+		$cmd=qq();
+	} elsif ($format =~ /fasta$/) {
+		$cmd=qq();
+	}
+	return $cmd;
 }
 
 sub runABySS ($) {
@@ -4690,11 +4879,11 @@ sub runCRAC($) {
 #########################################################
 
 sub runRepeatMasker ($) {
-	
+	my $self=shift;
 }
 
 sub runTRF ($) {
-	
+	my $self=shift;
 }
 
 
@@ -4801,9 +4990,16 @@ sub runCluster ($) {
 #cluster -f tabfile -l -cg m -ca a -na -e 7	
 }
 
+# circos -conf circos.conf
 sub runCirCOS ($) {
-	
+	my $self=shift;
 }
+
+#########################################################
+#                                                       #
+#                  Paleogenomics                        #
+#                                                       #
+#########################################################
 
 sub runANFO ($) {
 	
