@@ -249,7 +249,7 @@ ggplot\(data=data, aes\(x=log\(coverage\), y=loci, color=prep_type\)\) +
 
 sub run_log ($) {
 	my $self = shift;
-	MY $verbose = shift;
+	my $verbose = shift;
 	my $user = `whoami`;chomp $user;
 	my $finger_cmd = qq(finger |grep $user|perl -ne 'if\(\/\(\\d+\\.\\d+\\.\\d+\\.\\d+\)\/\){print "\$1\\n"}' |tail -1);
 	my $login = `$finger_cmd`;chomp $login;

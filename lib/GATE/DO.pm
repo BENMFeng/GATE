@@ -105,7 +105,7 @@ sub parseConfig($) {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($rule,$condition)=($1,$2);
 				if ($rule =~ /skip/i) {
-					my @cond=split "\s+",$condition;
+					my @cond=split /\s+/,$condition;
 					map{$self->{"$name:$rule"}{$_}=1}@cond;
 				} else {
 					$self->{"$name:$rule"}=$condition;
@@ -115,10 +115,10 @@ sub parseConfig($) {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($lib,$path)=($1,$2);
 				if ($name =~ /software/) {
-					if ($_=~/^[\s\=]+)\=([^\=]+)/) {
+					if ($lib=~/^([\s\=]+)/) {
 						$path=GATE::Error::checkPath($path); 
 						$self->{"$name:$lib"} = $path;
-					} elseif ($_=~/^\s+[\s\=]+)\=([^\=]+)/) {
+					} elsif ($lib=~/^\s+([\s\=]+)/) {
 						$self->{"setting:$lib:$1"} = $2;
 					}
 				}
@@ -2415,8 +2415,8 @@ sub runSOAP ($$) {
 	my $soap = GATE::Error::checkPath($self->{"software:soap"});
 	my $msort = GATE::Error::checkPath($self->{"software:msort"}) if (exists $self->{"software:msort"});
 	if (defined $msort){
-		$soap_cmd .= qq(export msort="$msort"\n)
-		$soap_cmd .= qq(alias sortbychr=$msort -k '2{1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y MT chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM},3n');
+		$soap_cmd .= qq(export msort="$msort"\n);
+		$soap_cmd .= qq(alias sortbychr=$msort -k '2{1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y MT chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM},3n'\n);
 	}
 	
 	my $soap_path = $1 if (defined $soap && $soap=~/(\S+)\/soap/);
@@ -2447,7 +2447,7 @@ sub runSOAP ($$) {
 	$soap_cmd .= "[[ -d $soap_outdir ]] || mkdir $soap_outdir\n" if (!-d qq($self->{"-workdir"}/$soap_outdir));
 	$soap_cmd .= "cd $soap_outdir\n";
 	my @libraries=sort keys %{$self->{'LIB'}};
-	my @soap=();
+	my @SOAP=();
 	my @bam=();
 	foreach my $lib(@libraries) {
 		$soap_cmd .= "[[ -d $lib ]] || mkdir $lib\n" if (!-d qq($self->{"-workdir"}/$soap_outdir/$lib));
@@ -2479,7 +2479,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.$k.paired.soap -2 $lib.$k.unpaired.soap -m $m -x $x \{$soappara}\n);
-					push @soap,("$lib.$k.paired.soap","$lib.$k.unpaired.soap");
+					push @SOAP,("$lib.$k.paired.soap","$lib.$k.unpaired.soap");
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.paired.soap > $lib.$k.paired.sam\n);
@@ -2504,7 +2504,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -b $reads_b -D \${REFERENCE} -o $lib.pair.soap -2 $lib.unpaired.soap -m $m -x $x \{$soappara}\n);
-					push @soap,("$lib.pair.soap","$lib.unpaired.soap");
+					push @SOAP,("$lib.pair.soap","$lib.unpaired.soap");
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.paired.soap > $lib.paired.sam\n);
@@ -2537,7 +2537,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -D \${REFERENCE} -o $lib.$k.single.soap \{$soappara}\n);
-					push @soap,"$lib.$k.single.soap";
+					push @SOAP,"$lib.$k.single.soap";
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.$k.single.soap > $lib.$k.single.sam\n);
@@ -2560,7 +2560,7 @@ sub runSOAP ($$) {
 						}
 					}
 					$soap_cmd .= qq(\${soap} -a $reads_a -D \${REFERENCE} -o $lib.single.soap \{$soappara}\n);
-					push @soap,"$lib.single.soap";
+					push @SOAP,"$lib.single.soap";
 					if (defined $soap2sam) {
 						$soap_cmd .= qq(awk 'BEGIN{print $rg}{print}' $reference.ihg.sam > $lib.inh.sam\n);
 						$soap_cmd .= qq(\${soap2sam} -p $lib.single.soap > $lib.single.sam\n);
@@ -2605,7 +2605,7 @@ sub runSOAP ($$) {
 				}
 				else {
 					foreach my $BAM(@bam){
-						push @{$self->{"$ref-soapbam"}}="$workdir/$soap_outdir/$lib/$BAM";
+						push @{$self->{"$ref-soapbam"}},"$workdir/$soap_outdir/$lib/$BAM";
 					}
 				}
 			} else {
@@ -2613,12 +2613,12 @@ sub runSOAP ($$) {
 			}
 			
 		}
-		if (@soap>0) {
-			my $soap_merge = "cat ",join " ",@soap;
+		if (@SOAP>0) {
+			$soap_cmd .= "cat ".(join " ",@SOAP);
 			if (defined $msort) {
-				" | sortbychr > $lib.all.soap\n";
+				$soap_cmd .= " | sortbychr > $lib.all.soap\n";
 			} else {
-				" | sort -n -k 2,3 > $lib.all.soap\n";
+				$soap_cmd .= " | sort -n -k 2,3 > $lib.all.soap\n";
 			}
 			${$self->{"$ref-soap"}}="$workdir/$soap_outdir/$lib/$lib.all.soap";
 		}
@@ -3378,7 +3378,6 @@ sub runSOAPsnp($$) {
 	my $self=shift;
 	my $ref =shift;
 	$ref  ||='ref';
-	my $soapsnp = $self->{"software:soapsnp"};
 	if (!exists $self->{"software:soapsnp"} || !defined $self->{"software:soapsnp"}) {
 		return "";
 	}
@@ -3408,7 +3407,7 @@ sub runSOAPsnp($$) {
 		$soapsnp_cmd .= qq([[ -d $lib ]] || mkdir -p $lib\n) if (!-d qq($self->{"-workdir"}/$vardir/$lib));
 		$soapsnp_cmd .= qq(cd $lib);
 		if (exists $self->{"$ref-soap"}) {
-			$soapsnp_cmd .= qq(\${soapsnp} -i $self->{"$ref-soap"} -d \$REFERENCE -o $prefix.cns -T $prefix.region.out \${para} );
+			$soapsnp_cmd .= qq(\${soapsnp} -i $self->{"$ref-soap"} -d \$REFERENCE -o $lib.cns -T $lib.region.out \${para} );
 			if (exists $self->{"database:dbSNP"} && GATE::Error::checkdbSNP($self->{"database:dbSNP"})) {
 				$soapsnp_cmd .= " -s \${dbSNP}";
 			}
@@ -3573,14 +3572,14 @@ sub runVarScan ($$) {
 			$varscan_cmd .= qq(cd $lib);
 			my $tumor_pileup = $libbam{$lib}{"tumor"};
 			my $normal_pileup= $libbam{$lib}{"normal"};
-			$varscan_cmd .= qq(\${VarScan} somatic $nomal_pileup $tumor_pileup $lib.somatic.var && );
+			$varscan_cmd .= qq(\${VarScan} somatic $normal_pileup $tumor_pileup $lib.somatic.var && );
 			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.somatic.var );
 			if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
 				$varscan_cmd = " &\n";
 			} else {
 				$varscan_cmd = " \n";
 			}
-			$varscan_cmd .= qq(\${VarScan} copynumber $nomal_pileup $tumor_pileup $lib.cnv.var && );
+			$varscan_cmd .= qq(\${VarScan} copynumber $normal_pileup $tumor_pileup $lib.cnv.var && );
 			$varscan_cmd .= qq(\${VarScan} somaticFilter $lib.cnv.var );
 			if (exists $self->{"setting:multithreads"} && $multi %$self->{"setting:multithreads"} !=0){
 				$varscan_cmd = " &\n";
