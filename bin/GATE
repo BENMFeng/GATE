@@ -46,7 +46,7 @@ Mainly suitable for generating batch jobs of applications for illumina sequencin
 
 Author: BENM <binxiaofeng@gmail.com>
 
-Version: v0.1.9 nightly, Sep 12th, 2013
+Version: v0.1.10 nightly, Sep 22th, 2013
 
 =head1 Option
 
@@ -309,6 +309,15 @@ foreach (@ARGV) {
 
 
 my ($pipeline,$allwork)=("","");
+if (exists $gate->{"setting:split"}){
+	my $worksh="splitSeq\.$$.sh";
+	open (OUT,">$worksh") || die $!;
+	if (defined $Auto) {
+		print OUT $gate->{"setting:PBS-header"};
+	}
+	print OUT $gate->splitSeq;
+	$allwork.=qq(echo \`date\`\necho "run $worksh"\nsh $worksh > splitSeq.$$.log 2>&1\n);
+}
 foreach my $cmd(@cmd_ary){
 	if (exists $gate->{'cmd'}{$cmd}){
 		next if ($gate->{'cmd'}==0);

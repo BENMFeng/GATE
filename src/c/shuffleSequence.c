@@ -56,7 +56,7 @@ int main (int argc, char *argv[])
 
 	fpA = gzopen(argv[1],"r");
 	fpB = gzopen(argv[2],"r");
-	int type;
+
 	if ( argc > 3) {
 		fpC = gzopen(argv[3],"w");
 		gzFile fpC;

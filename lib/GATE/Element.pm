@@ -63,6 +63,11 @@ sub bc($) {
 	$self->runPhred().$self->runCASAVA();
 }
 
+sub splitSeq($) {
+	my $self=shift;
+	$self->splitSequence();
+}
+
 sub qc($) {
 	my $self=shift;
 	$self->selectIdxFastq().$self->mergeOverlapPE().$self->runQA().$self->runFastQC().$self->runFltDup().$self->runFltAP().$self->runRSeQC().$self->runRNASeqQC().$self->runSEECER();

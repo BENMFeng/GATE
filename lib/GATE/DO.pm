@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1e,09-20-2013";
+$VERSION = "1.1f,09-22-2013";
 use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
 use lib "$FindBin::Bin/../lib";  ## Bin live in the lib
 use File::Basename qw(basename dirname);
@@ -82,6 +82,7 @@ sub parseConfig($) {
 				}
 				if (/([^\=]+)\=([^\=]+)/){
 					my ($type,$path)=($1,$2);
+					$type = GATE::ALIAS::alias($type);
 					$countSample{"$name $lib $type"}++;
 					${$self->{$name}{$lib}{$type}}[$countSample{"$name $lib $type"}-1]=GATE::Error::checkPath($path);
 					$self->{$lib}{$type}{$countSample{"$name $lib $type"}-1}{'Index'}=$index if (defined $index && $index ne "");
@@ -184,7 +185,7 @@ sub checkFileFormat ($) {
 		} elsif ($file=~/fastq.gz$/i || $file=~/fq.gz$/i) {
 			return "fastq.gz";
 		} elsif ($file=~/gz$/i) {
-			open (IN,"zcat $file|");
+			open (IN,"gzip -cd $file|");
 			my $line=<IN>;
 			if ($line=~/^\>/) {
 				return "fasta.gz";
@@ -367,10 +368,223 @@ sub runDataAnalysis ($) {
 
 sub splitSequence ($) {
 	my $self=shift;
+	if (!exists $self->{'setting:split'} || $self->{'setting:split'} !~ /\d+/) {
+		return "";
+	}
+	my $split_cmd=qq(echo `date`; echo "run splitSequence"\n);
+	$split_cmd .=  qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $para = $self->{'setting:split'};
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries) {
-		
+		my %Seq=getlibInput($self->{"LIB"}{$lib});
+		my %hash;
+		if (exists $Seq{1} && exists $Seq{2}) {
+			for (my $i=0;$i<@{$Seq{2}};$i++){
+				my $reads1=${$Seq{1}}[$i];
+				my $reads2=${$Seq{2}}[$i];
+				my $path=$1 if ($reads1=~/(\S+)\/[^\s\/]+$/);
+				$split_cmd .= "cd $path\n";
+				$split_cmd .= qq([[ -d tmp_split ]] || mkdir tmp_split\n) if (!-d "$path/tmp_split");
+				my $format1=checkFileFormat($reads1);
+				my $format2=checkFileFormat($reads2);
+				if ($format1 eq $format2) {
+					if ($format1=~/gz$/){
+						if ($format1=~/fastq/) {
+							my $line1=`gzip -cd $reads1 |wc -l`;$line1=$1 if ($line1=~/(\d+)/);
+							my $line2=`gzip -cd $reads1 |wc -l`;$line2=$1 if ($line2=~/(\d+)/);
+							if ($line1 != $line2) {
+								die "Error: line number not equal!\n\t$line1\t$reads1\n$line2\t$reads2\n";
+							}
+							my $split_line=int($line1/$para+.5);
+							while($split_line % 4 != 0){
+								++$split_line;
+							}
+							my $real_split = ($line1%$split_line==0)? $line1/$split_line-1 : int($line1/$split_line);
+							$split_cmd .= qq(gzip -cd $reads1 | split -l $split_line -d - tmp_split/$reads1.\n);
+							$split_cmd .= qq(gzip -cd $reads2 | split -l $split_line -d - tmp_split/$reads2.\n);
+							$split_cmd .= qq(for i in `ls tmp_split/$reads1.*`;do gzip -v \$i;done\n);
+							$split_cmd .= qq(for j in `ls tmp_split/$reads2.*`;do gzip -v \$j;done\n);
+							my @keys=keys %{$self->{$lib}{'fq1'}{$i}};
+							for my $j(0..$real_split) {
+								my $n=sprintf("%02d",$j);
+								$hash{'LIB'}{$lib}{'fq1'}{$j}="$path/tmp_split/$reads1.$n.gz";
+								foreach my $k(@keys){
+									$hash{$lib}{'fq1'}{$j}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
+								}
+							}
+						} elsif ($format1=~/fasta/) {
+							my $line1=`gzip -cd $reads1 | grep ">" | wc -l`;$line1=$1 if ($line1=~/(\d+)/);
+							my $line2=`gzip -cd $reads2 | grep ">" | wc -l`;$line2=$1 if ($line2=~/(\d+)/);
+							if ($line1 != $line2) {
+								die "Error: line number not equal!\n\t$line1\t$reads1\n$line2\t$reads2\n";
+							}
+							my $split_line=int($line1/$para+.5);
+							my $real_split = ($line1%$split_line==0)? $line1/$split_line-1 : int($line1/$split_line);
+							$split_cmd.=splitFasta($reads1,$split_line,"./tmp_split");
+							$split_cmd.=splitFasta($reads2,$split_line,"./tmp_split");
+							$split_cmd .= qq(for i in `ls tmp_split/$reads1.*`;do gzip -v \$i;done\n);
+							$split_cmd .= qq(for j in `ls tmp_split/$reads2.*`;do gzip -v \$j;done\n);
+							my @keys=keys %{$self->{$lib}{'fa1'}{$i}};
+							for my $j(0..$real_split) {
+								my $n=sprintf("%02d",$j);
+								$hash{'LIB'}{$lib}{'fa1'}{$j}="$path/tmp_split/$reads1.$n.gz";
+								foreach my $k(@keys){
+									$hash{$lib}{'fa1'}{$j}{$k}=$self->{$lib}{'fa1'}{$i}{$k};
+								}
+							}
+						}
+					} elsif ($format1=~/fastq/) {
+						my $line1=`wc -l $reads1`;$line1=$1 if ($line1=~/(\d+)/);
+						my $line2=`wc -l $reads2`;$line2=$1 if ($line2=~/(\d+)/);
+						if ($line1 != $line2) {
+							die "Error: line number not equal!\n\t$line1\t$reads1\n$line2\t$reads2\n";
+						}
+						my $split_line=int($line1/$para+.5);
+						while($split_line % 4 != 0){
+							++$split_line;
+						}
+						my $real_split = ($line1%$split_line==0)? $line1/$split_line-1 : int($line1/$split_line);
+						$split_cmd .= qq(split -l $split_line -d $reads1 tmp_split/$reads1.\n);
+						$split_cmd .= qq(split -l $split_line -d $reads2 tmp_split/$reads2.\n);
+						my @keys=keys %{$self->{$lib}{'fq1'}{$i}};
+						for my $j(0..$real_split) {
+							my $n=sprintf("%02d",$j);
+							$hash{'LIB'}{$lib}{'fq1'}{$j}="$path/tmp_split/$reads1.$n.gz";
+							foreach my $k(@keys){
+								$hash{$lib}{'fq1'}{$j}{$k}=$self->{$lib}{'fq1'}{$i}{$k};
+							}
+						}
+					} elsif ($format1=~/fasta/) {
+							my $line1=`wc -l $reads1`;$line1=$1 if ($line1=~/(\d+)/);
+							my $line2=`wc -l $reads2`;$line2=$1 if ($line2=~/(\d+)/);
+							if ($line1 != $line2) {
+								die "Error: line number not equal!\n\t$line1\t$reads1\n$line2\t$reads2\n";
+							}
+							my $split_line=int($line1/$para+.5);
+							my $real_split = ($line1%$split_line==0)? $line1/$split_line-1 : int($line1/$split_line);
+							$split_cmd.=splitFasta($reads1,$split_line,"./tmp_split");
+							$split_cmd.=splitFasta($reads2,$split_line,"./tmp_split");
+							$split_cmd .= qq(for i in `ls tmp_split/$reads1.*`;do gzip -v \$i;done\n);
+							$split_cmd .= qq(for j in `ls tmp_split/$reads2.*`;do gzip -v \$j;done\n);
+							my @keys=keys %{$self->{$lib}{'fa1'}{$i}};
+							for my $j(0..$real_split) {
+								my $n=sprintf("%02d",$j);
+								$hash{'LIB'}{$lib}{'fa1'}{$j}="$path/tmp_split/$reads1.$n.gz";
+								$hash{'LIB'}{$lib}{'fa2'}{$j}="$path/tmp_split/$reads2.$n.gz";
+								foreach my $k(@keys){
+									$hash{$lib}{'fa1'}{$j}{$k}=$self->{$lib}{'fa1'}{$i}{$k};
+									$hash{$lib}{'fa2'}{$j}{$k}=$self->{$lib}{'fa2'}{$i}{$k};
+								}
+							}
+					}
+				} else {
+					die "Error: files format not match!\n\t$reads1\n\t$reads2\n";
+				}
+			}
+		}
+		if (exists $Seq{0}) {
+			for (my $i=0;$i<@{$Seq{0}};$i++){
+				my $reads=${$Seq{0}}[$i];
+				my $path=$1 if ($reads=~/(\S+)\/[^\s\/]+$/);
+				$split_cmd .= "cd $path\n";
+				$split_cmd .= qq([[ -d tmp_split ]] || mkdir tmp_split\n) if (!-d "$path/tmp_split");
+				my $format=checkFileFormat($reads);
+				if ($format=~/gz$/){
+					if ($format=~/fastq/) {
+						my $line=`gzip -cd $reads |wc -l`;$line=$1 if ($line=~/(\d+)/);
+						my $split_line=int($line/$para+.5);
+						while($split_line % 4 != 0){
+							++$split_line;
+						}
+						my $real_split = ($line%$split_line==0)? $line/$split_line-1 : int($line/$split_line);
+						$split_cmd .= qq(gzip -cd $reads | split -l $split_line -d - tmp_split/$reads.\n);
+						$split_cmd .= qq(for i in `ls tmp_split/$reads.*`;do gzip -v $i;done\n);
+						my @keys=keys %{$self->{$lib}{'fq'}{$i}};
+						for my $j(0..$real_split) {
+							my $n=sprintf("%02d",$j);
+							$hash{'LIB'}{$lib}{'fq'}{$j}="$path/tmp_split/$reads.$n.gz";
+							foreach my $k(@keys){
+								$hash{$lib}{'fq'}{$j}{$k}=$self->{$lib}{'fq'}{$i}{$k};
+							}
+						}
+					} elsif ($format=~/fasta/) {
+						my $line=`gzip -cd $reads | grep ">" | wc -l`;$line=$1 if ($line=~/(\d+)/);
+						my $split_line=int($line/$para+.5);
+						my $real_split = ($line%$split_line==0)? $line/$split_line-1 : int($line/$split_line);
+						$split_cmd.=splitFasta($reads,$split_line,"./tmp_split");
+						$split_cmd .= qq(for i in `ls tmp_split/$reads.*`;do gzip -v $i;done\n);
+						my $type=(exists $self->{$lib}{'fa'})?'fa':(exists $self->{$lib}{'seq'})?'seq':'';
+						if ($type ne ''){
+							my @keys=keys %{$self->{$lib}{$type}{$i}};
+							for my $j(0..$real_split) {
+								my $n=sprintf("%02d",$j);
+								$hash{'LIB'}{$lib}{$type}{$j}="$path/tmp_split/$reads.$n.gz";
+								foreach my $k(@keys){
+									$hash{$lib}{$type}{$j}{$k}=$self->{$lib}{$type}{$i}{$k};
+								}
+							}
+						}
+					}
+				} elsif ($format=~/fastq/) {
+					my $line=`wc -l $reads`;$line=$1 if ($line=~/(\d+)/);
+					my $split_line=int($line/$para+.5);
+					while($split_line % 4 != 0){
+						++$split_line;
+					}
+					my $real_split = ($line%$split_line==0)? $line/$split_line-1 : int($line/$split_line);
+					$split_cmd .= qq(split -l $split_line -d $reads tmp_split/$reads.\n);
+					my @keys=keys %{$self->{$lib}{'fq'}{$i}};
+					for my $j(0..$real_split) {
+						my $n=sprintf("%02d",$j);
+						if ($j>100){
+							$n=sprintf("%03d",$j);
+						}
+						$hash{'LIB'}{$lib}{'fq'}{$j}="$path/tmp_split/$reads.$n.gz";
+						foreach my $k(@keys){
+							$hash{$lib}{'fq'}{$j}{$k}=$self->{$lib}{'fq'}{$i}{$k};
+						}
+					}
+				} elsif ($format=~/fasta/) {
+					my $line=`wc -l $reads | grep ">"`;$line=$1 if ($line=~/(\d+)/);
+					my $split_line=int($line/$para+.5);
+					my $real_split = ($line%$split_line==0)? $line/$split_line-1 : int($line/$split_line);
+					$split_cmd.=splitFasta($reads,$split_line,"./tmp_split");
+					$split_cmd .= qq(for i in `ls tmp_split/$reads.*`;do gzip -v $i;done\n);
+					my $type=(exists $self->{$lib}{'fa'})?'fa':(exists $self->{$lib}{'seq'})?'seq':'';
+					if ($type ne ''){
+						my @keys=keys %{$self->{$lib}{$type}{$i}};
+						for my $j(0..$real_split) {
+							my $n=sprintf("%02d",$j);
+							$hash{'LIB'}{$lib}{$type}{$j}="$path/tmp_split/$reads.$n.gz";
+							foreach my $k(@keys){
+								$hash{$lib}{$type}{$j}{$k}=$self->{$lib}{$type}{$i}{$k};
+							}
+						}
+					}
+				}
+			}
+		}
 	}
+	return $split_cmd;
+}
+
+sub splitFasta ($) {
+	my $reads = shift;
+	my $number = shift;
+	my $outdir = shift;
+	my $cmd="pelr -e 'my \$i=0;my \$j=0;my \$n=sprintf\(\"\%02d\",\$j\)";
+	$cmd.=qq(open \(OUT,">$outdir/$reads\.\$n"\););
+	if ($reads=~/\.gz$/i){
+		$cmd.=qq(open \(IN,"gzip -cd $reads\|"\););
+	} else {
+		$cmd.=qq(open \(IN,$reads\););
+	}
+	$cmd.=qq(while\(<IN>\)\{);
+	$cmd.=qq(if \(/^\\>/\)\{);
+	$cmd.=qq(\$i++;if \(\$i%$number==0\){close OUT;\$j=0;\$n=sprintf\(\"\%02d\",\$j\);open \(OUT,">$outdir/$reads\.\$n"\);\}\});
+	$cmd.=qq(print OUT \$_;);
+	$cmd.=qq(\});
+	$cmd.=qq(close IN;close OUT;'\n);
 }
 
 #selectIdxFastq.pl v1.1, 2013-05-03
@@ -1864,7 +2078,7 @@ sub runBWA($$) {
 		$picard=GATE::Error::checkPath($self->{"software:picard"});
 		my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 		$bwa_cmd .= qq(export picard="$picard"\n);
-		$picard = GATE::Error:correctJavaCmd($picard,"\${heap}");
+		$picard = GATE::Error::correctJavaCmd($picard,"\${heap}");
 		$FixMateInformation=(exists $self->{"software:FixMateInformation"})?$self->{"software:FixMateInformation"}:qq($picardpath/FixMateInformation.jar);
 	}
 	
@@ -2002,7 +2216,7 @@ sub runBWA($$) {
 					$bwa_cmd .= qq(export FixMateInformation="$FixMateInformation"\n);
 					#$bwa_cmd .= qq(mkdir -p ./tmp_fixmate\n);
 					#$bwa_cmd .= qq(export tmp_fixmate="./tmp_fixmate"\n);
-					$FixMateInformation=GATE::Error:correctJavaCmd($FixMateInformation,"\${heap}","./tmp_fixmate");
+					$FixMateInformation=GATE::Error::correctJavaCmd($FixMateInformation,"\${heap}","./tmp_fixmate");
 					my $FixMateInformationPara=(exists $self->{"setting:FixMateInformation"})? $self->{"setting:FixMateInformation"}:"SO=coordinate CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT";
 					my $fxmtbam=$bam;
 					$fxmtbam=~s/bam$/fxmat\.bam/;
@@ -2306,7 +2520,7 @@ sub runBowtie($$) {
 				$MergeSamFiles=qq(java -Xmx\${heap} -Djava.io.tmpdir=./tmp_merge -jar $MergeSamFiles) if ($MergeSamFiles!~/^java/ && $MergeSamFiles !~ /\-jar/);
 				my $MergeSamFilesPara=$self->{"setting:MergeSamFiles"};
 				my $MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
-				$MarkDuplicates=GATE::Error:correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
+				$MarkDuplicates=GATE::Error::correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
 				my $MarkDuplicatesPara=(exists $self->{"setting:MarkDuplicates"})?$self->{"setting:MarkDuplicates"}:'VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true ASSUME_SORTED=true';
 				my $merge_bam=join " INPUT=",@bam;
 				$bowtie_cmd .= "$MergeSamFiles INPUT=$merge_bam $MergeSamFilesPara OUTPUT=$lib.merge.bam\n";
@@ -2797,20 +3011,20 @@ sub runGATK ($$) {
 		$picard=$self->{"software:picard"};
 		$picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 		$gatk_cmd .= qq(export picard="$picard"\n);
-		$picard = GATE::Error:correctJavaCmd($picard,"\${heap}");
+		$picard = GATE::Error::correctJavaCmd($picard,"\${heap}");
 		$MergeSamFiles=(exists $self->{"software:MergeSamFiles"})?$self->{"software:MergeSamFiles"}:qq($picardpath/MergeSamFiles.jar);
 		$gatk_cmd .= qq(export MergeSamFiles="$MergeSamFiles"\n);
-		$MergeSamFiles=GATE::Error:correctJavaCmd($MergeSamFiles,"\${heap}","./tmp_merge");
+		$MergeSamFiles=GATE::Error::correctJavaCmd($MergeSamFiles,"\${heap}","./tmp_merge");
 		$MarkDuplicates=(exists $self->{"software:MarkDuplicates"})?$self->{"software:MarkDuplicates"}:"$picardpath/MarkDuplicates.jar";
 		$gatk_cmd .= qq(export MarkDuplicates="$MarkDuplicates"\n);
-		$MarkDuplicates=GATE::Error:correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
+		$MarkDuplicates=GATE::Error::correctJavaCmd($MarkDuplicates,"\${heap}","./tmp_rmdup");
 		if (defined $picard) {
 			my $dict=GATE::Error::checkIndex('picard',$reference);
 			if ($dict==0) {
 				my $CreateSequenceDictionary="";
 				my $picardpath=$1 if ($self->{"software:picard"}=~/(.*)\/[^\/\s]+$/);
 				$CreateSequenceDictionary=(exists $self->{"software:CreateSequenceDictionary"})?$self->{"software:CreateSequenceDictionary"}:qq($picardpath/CreateSequenceDictionary.jar);
-				$CreateSequenceDictionary=GATE::Error:correctJavaCmd($CreateSequenceDictionary,"\${heap}");
+				$CreateSequenceDictionary=GATE::Error::correctJavaCmd($CreateSequenceDictionary,"\${heap}");
 				my $ref_prefix=$1 if ($reference=~/([^\s]+)\.fa/i);
 				$gatk_cmd .= "$CreateSequenceDictionary R=\$REFERENCE O=$ref_prefix\.dict CREATE_INDEX=true CREATE_MD5_FILE=true TRUNCATE_NAMES_AT_WHITESPACE=true VALIDATION_STRINGENCY=STRICT\n";
 			}
@@ -2822,7 +3036,7 @@ sub runGATK ($$) {
 		$gatk_cmd .= qq(export bamtools\="$bamtools"\n);
 	}
 	my $gatk=GATE::Error::checkPath($self->{"software:gatk"}) if (exists $self->{"software:gatk"});
-	$gatk=GATE::Error:correctJavaCmd($gatk,$heap,"./tmp_gatk");
+	$gatk=GATE::Error::correctJavaCmd($gatk,$heap,"./tmp_gatk");
 	$gatk_cmd .= qq(export gatk="$gatk"\n);
 	if (exists $self->{"database:dbSNP"})
 	{
@@ -3028,14 +3242,14 @@ sub runGATK ($$) {
 				my $AnalyzeCovariates;
 				if (exists $self->{"software:AnalyzeCovariates"})
 				{
-					$AnalyzeCovariates=GATE::Error:correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
+					$AnalyzeCovariates=GATE::Error::correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
 				}
 				else
 				{
 					$AnalyzeCovariates=GATE::Error::checkPath("$1/resource/AnalyzeCovariates.jar") if ($self->{"software:gatk"}=~/(\S+)\/[^\/\s]+$/);
 					if (defined $AnalyzeCovariates && -f $AnalyzeCovariates)
 					{
-						$AnalyzeCovariates=GATE::Error:correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
+						$AnalyzeCovariates=GATE::Error::correctJavaCmd($AnalyzeCovariates,$heap,"./tmp_covar");
 					}
 				}
 				if (defined $AnalyzeCovariates)
@@ -3463,7 +3677,7 @@ sub runVarScan ($$) {
 	my $heap = $self->{"setting:heap"};
 	$varscan_cmd .= qq(export heap="$heap"\n);
 	my $varscan=GATE::Error::checkPath($self->{"software:VarScan"});
-	$varscan=GATE::Error:correctJavaCmd($varscan,"\${heap}","./tmp_rmdup");
+	$varscan=GATE::Error::correctJavaCmd($varscan,"\${heap}","./tmp_rmdup");
 	my $samtools=GATE::Error::checkPath($self->{"software:samtools"});
 	$varscan_cmd .= GATE::ALIAS::general_header('REFERENCE',$ref,'varscan',$varscan,'samtools',$samtools);
 	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
@@ -3883,6 +4097,7 @@ sub runVelvetOases ($) {
 	my @libraries=sort keys %{$self->{'LIB'}};
 	$velvet_cmd .= qq(cd $self->{"-workdir"}\n);
 	$velvet_cmd .= qq([[ -d velvet ]] || mkdir velvet\n);
+	my $i=1;
 	foreach my $lib(@libraries) {
 		$velvet_cmd .= qq(echo `date`; echo "$lib"\n);
 		$velvet_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) unless (-d qq($self->{"-workdir"}/$lib));
@@ -3899,8 +4114,9 @@ sub runVelvetOases ($) {
 				my $reads1=${$read{1}}[$i];
 				my $reads2=${$read{2}}[$i];
 				my $format=$self->checkFileFormat($reads1);
-				my $reads="";
-				$velvet_cmd .= shuffleSequences($reads1,$reads2,$reads,$format);
+				my $reads="$lib.$i.$format";
+				$i++;
+				$velvet_cmd .= $self->shuffleSequence($reads1,$reads2,$reads,$format);
 				$input.="-shortPaired --".$self->checkFileFormat($reads)." $reads";
 			}
 		}
@@ -3919,18 +4135,15 @@ sub runVelvetOases ($) {
 	return $velvet_cmd;
 }
 
-sub shuffleSequences ($) {
+sub shuffleSequence ($) {
+	my $self=shift;
 	my ($reads1,$reads2,$output,$format)=@_;
-	$$output=$1 if ($reads1=~/([^\/\.]+)\.\w+$/);
-	my $cmd = "";
-	if ($format =~ /fastq\.gz$/) {
-		$cmd=qq();
-	} elsif ($format =~ /fasta\.gz$/) {
-		$cmd=qq();
-	} elsif ($format =~ /fastq$/) {
-		$cmd=qq();
-	} elsif ($format =~ /fasta$/) {
-		$cmd=qq();
+	my $cmd="";
+	my $shuffleSequence = GATE::Error::checkPath($self->{"software:shuffleSequence"});
+	if ($format=~/\.gz$/) {
+		my $cmd = "$shuffleSequence $reads1 $reads2 $output";
+	} else {
+		my $cmd = "$shuffleSequence $reads1 $reads2 > $output";
 	}
 	return $cmd;
 }
@@ -4464,7 +4677,7 @@ sub runScripture ($) {
 	my $heap = $self->{"setting:heap"};
 	$scripture_cmd .= qq(export heap="$heap"\n);
 	my $scripture = GATE::Error::checkPath($self->{"software:scripture"}) if (exists $self->{"software:scripture"});
-	$scripture=GATE::Error:correctJavaCmd($scripture,$heap,"./tmp_scripture");
+	$scripture=GATE::Error::correctJavaCmd($scripture,$heap,"./tmp_scripture");
 	my $para = $self->{"setting:scripture"} if (exists $self->{"setting:scripture"});
 	$scripture_cmd .= qq(export scripture="$scripture"\n);
 	$scripture_cmd .= qq(export para="$para"\n);
