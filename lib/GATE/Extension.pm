@@ -267,7 +267,7 @@ sub run_log ($) {
 	}
 	my $date_cmd=qq(date +"\%Y-\%m-\%d \%H:\%M:\%S");
 	my $date=`$date_cmd`;chomp $date;
-	my $cmd=qq(echo "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.7 nightly, May 13th, 2013");
+	my $cmd=qq(echo "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.10 nightly, Sep 22th, 2013");
 	system $cmd if ($verbose);
 	my $further_cmd=qq(echo -s "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.7 nightly, May 13th, 2013" | mail -s "GATE running log" GATE.BENM\@gmail.com);
 	system $further_cmd;

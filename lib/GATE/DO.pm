@@ -3060,14 +3060,18 @@ sub runGATK ($$) {
 		}
 		$gatk_cmd .= "cd $lib\n";
 		if (!exists $self->{$lib}{"$ref-bam"}) {
-			if (exists $self->{$lib}{"$ref-bwabam"} && @{$self->{$lib}{"$ref-bwabam"}}>1) {
+			my @BAM=();
+			if (exists $self->{$lib}{"$ref-bwabam"}) {
+				@BAM=@{${$self->{$lib}{"$ref-bwabam"}}};
+			}elsif(exists $self->{$lib}{"$ref-bowtiebam"}){
+				@BAM=@{$self->{$lib}{"$ref-bowtiebam"}};
+			}elsif(exists $self->{$lib}{"$ref-soapbam"}){
+				@BAM=@{$self->{$lib}{"$ref-soapbam"}};
+			}
+			if (@BAM>1){
 				my $merge_bam="";
 				if (defined $MergeSamFiles && $MergeSamFiles ne "") {
 ## Merge BAM 
-					#$gatk_cmd .= qq(mkdir -p ./tmp_merge);
-					#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
-					#$gatk_cmd .= qq(export tmp_merge="./tmpmerge");
-					#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 					my $MergeSamFilesPara=(exists $self->{"setting:MergeSamFiles"})?$self->{"setting:MergeSamFiles"}:'USE_THREADING=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT';
 					$merge_bam=join " INPUT\=",@{$self->{$lib}{"ref-bwabam"}};
 					$gatk_cmd .= "$MergeSamFiles INPUT\=$merge_bam $MergeSamFilesPara OUTPUT\=$lib.merge.bam";
@@ -3094,17 +3098,13 @@ sub runGATK ($$) {
 					$bam="$lib.merge.bam";
 				}
 				$self->{$lib}{"$ref-bam"}=qq($self->{"-workdir"}/$self->{"setting:var_outdir"}/$lib/$lib.merge.bam);
-			}
-			elsif (exists $self->{$lib}{"$ref-bwabam"}) {
-				$bam=${$self->{$lib}{"$ref-bwabam"}}[0];
-				#$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf && vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-				#$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
-				$self->{$lib}{"$ref-bam"}=${$self->{$lib}{"$ref-bwabam"}}[0];
+			} else {
+				$bam=$BAM[0];
+				$self->{$lib}{"$ref-bam"}=$bam;
 			}
 		} else {
 			$bam=$self->{$lib}{"$ref-bam"};
 		}
-
 ## Filter
 #${bamtools} filter \
 #  -isMapped true \
@@ -3383,7 +3383,8 @@ sub runGATK ($$) {
 				$gatk_cmd .= "rm -rf $lib.merge.sort.bam $lib.realigned.bam tmp_realign tmp_gatk";
 				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			}
-		} else {
+		} 
+		if (exists $self->{'rule:var_caller'} && $self->{'rule:var_caller'} =~ /samtools/i) {
 			$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
 			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
@@ -3414,6 +3415,11 @@ sub runGATK ($$) {
 	return $gatk_cmd;
 }
 
+sub runGATKfilter ($) {
+	
+}
+
+# Variation annotation
 sub runSnpEff ($) {
 #"A program for annotating and predicting the effects of single nucleotide polymorphisms,
 #SnpEff: SNPs in the genome of Drosophila melanogaster strain w1118; iso-2; iso-3.", 

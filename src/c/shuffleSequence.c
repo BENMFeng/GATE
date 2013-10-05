@@ -45,7 +45,7 @@ KSEQ_INIT(gzFile,gzread)
 
 int main (int argc, char *argv[]) 
 {
-	gzFile  fpA,fpB,fpC;
+	gzFile  fpA,fpB;
 	kseq_t  *seqA,*seqB,*seqC;
 	int     lA,lB,lC;
 

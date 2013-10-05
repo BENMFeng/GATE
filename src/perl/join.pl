@@ -73,7 +73,7 @@ if ((@B==1)&&(@Input>1))
 {
 	my $b=$B[0];
 	$b=~s/(\d+)/($1+1)/eg;
-	warn ("for all the files, -ink parametr set as $b\n");
+	warn ("for all the files, -ink parameer set as $b\n");
 	for (my $i=0;$i<@Input;$i++)
 	{
 		@{$jcol{$i}}=check_dash(split /\,/,$B[0]);
