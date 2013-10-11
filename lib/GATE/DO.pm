@@ -4409,6 +4409,35 @@ sub runCuffdiff($) {
 
 sub runcummeRbund ($) {
 	my $self = shift;
+	if (!exists $self->{"rule:cummeRbund"}){
+		return "";
+	}
+	my $cummeRbund_cmd = qq(echo `date`; echo "run cummeRbund"\n);
+	$cummeRbund_cmd .= qq(export PATH=$self->{"setting:PATH"}:\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$cummeRbund_cmd .= qq(cd $self->{expdiff}\n);
+	my $out="cummeRbund.R";
+	my @LB=sort keys %{$self->{'LIB'}};
+	$cummeRbund_cmd .= qq(perl -e 'print "library\(cummeRbund\)\\
+cuff <- readCufflinks\(\)\\
+dens<-csDensity\(genes\(cuff\)\)\\
+dens\\
+b<-csBoxplot\(genes\(cuff\)\)\\
+b\\);
+	for (my $i=0;$i<@LB-1;$i++) {
+		for (my $j=$i+1;$j<@LB;$j++;){
+			$cummeRbund_cmd .= qq(s<-csScatter\(genes\(cuff\),"$LB[$i]","$LB[$j]",smooth=T\)\\
+s\\);
+		}
+	}
+	for (my $i=0;$i<@LB-1;$i++) {
+		for (my $j=$i+1;$j<@LB;$j++;){
+			$cummeRbund_cmd .= qq(v<-csVolcano\(genes\(cuff\),"$LB[$i]","$LB[$j"\)\\
+v\\);
+		}
+	}
+	$cummeRbund_cmd .=qq("' > $out\n);
+	$cummeRbund_cmd .=qq(R CMD BATCH $out\n);
+	return $cummeRbund;
 }
 
 

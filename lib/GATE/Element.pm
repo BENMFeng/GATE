@@ -85,12 +85,12 @@ sub var($) {
 
 sub exp($) {
 	my $self=shift;
-	$self->runCufflinks('-ref',"yes").$self->runCuffCompare().$self->runCuffMerge;
+	$self->runCufflinks('-ref',"yes").$self->runCuffCompare().$self->runCuffMerge();
 }
 
 sub diff($) {
 	my $self=shift;
-	$self->runCuffdiff('ref','refGene');
+	$self->runCuffdiff('ref','refGene').$self->runcummeRbund();
 }
 
 sub as($) {
