@@ -19,4 +19,5 @@ User need to setup the software you need, and create an config file for running 
 Donwload: git clone https://github.com/BENMFeng/GATE.git
 
 Exmaple: bin/GATE --config=config.txt --prefix=test qc aln var
-	 bin/GATE --config=config.txt --prefix=tran qc aln exp diff as plot
+
+         bin/GATE --config=config.txt --prefix=tran qc aln exp diff as plot

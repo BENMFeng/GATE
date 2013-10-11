@@ -5266,4 +5266,8 @@ sub mapDamage ($) {
 	
 }
 
+sub runFPSAC ($) {
+	
+}
+
 1;
