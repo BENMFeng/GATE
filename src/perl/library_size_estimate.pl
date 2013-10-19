@@ -5,7 +5,7 @@ use Getopt::Long;
 my %opts;
 my ($Type,$Help);
 GetOptions(\%opts,"t:s"=>\$Type,"help"=>\$Help);
-die qq(Example: samtools view -F 4 aln.sam | perl $0 -t sam > aln.insert-size.dist.txt
+die qq(Example: samtools view -F 4 aln.bam | perl $0 -t sam > aln.insert-size.dist.txt
 perl $0 reads.fastq -t fq > reads.length.dist.txt\n) if ($Help);
 $Type ||= "sam";
 if ($Type =~ /fq/i || $Type =~ /fastq/i)

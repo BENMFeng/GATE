@@ -4424,20 +4424,47 @@ dens\\
 b<-csBoxplot\(genes\(cuff\)\)\\
 b\\);
 	for (my $i=0;$i<@LB-1;$i++) {
-		for (my $j=$i+1;$j<@LB;$j++;){
+		for (my $j=$i+1;$j<@LB;$j++){
 			$cummeRbund_cmd .= qq(s<-csScatter\(genes\(cuff\),"$LB[$i]","$LB[$j]",smooth=T\)\\
 s\\);
 		}
 	}
 	for (my $i=0;$i<@LB-1;$i++) {
-		for (my $j=$i+1;$j<@LB;$j++;){
-			$cummeRbund_cmd .= qq(v<-csVolcano\(genes\(cuff\),"$LB[$i]","$LB[$j"\)\\
+		for (my $j=$i+1;$j<@LB;$j++){
+			$cummeRbund_cmd .= qq(v<-csVolcano\(genes\(cuff\),"$LB[$i]","$LB[$j]"\)\\
 v\\);
 		}
 	}
-	$cummeRbund_cmd .=qq("' > $out\n);
-	$cummeRbund_cmd .=qq(R CMD BATCH $out\n);
-	return $cummeRbund;
+	$cummeRbund_cmd .= qq("' > $out\n);
+	$cummeRbund_cmd .= qq(R CMD BATCH $out\n);
+	return $cummeRbund_cmd;
+}
+
+sub runHTSeq ($) {
+	my $self = shift;
+}
+
+sub runDESeq ($) {
+	my $self = shift;
+	if (!exists $self->{"rule:DESeq"}) {
+		return "";
+	}
+	my $deseq_cmd = qq(echo `date`; echo "run DESeq"\n);
+	
+	$deseq_cmd = qq(perl -e 'print "library\(DESeq2\);\\
+dds<-DESeq\(dds\)\\
+res<-results\(dds\)\\
+res<-res\[order\(res\$padj\),\]\\
+plotMA\(dds\)\\
+);
+}
+
+sub runDEGseq ($) {
+	
+}
+
+sub runedgeR ($) {
+	
 }
 
 
@@ -5203,8 +5230,11 @@ sub runClustalW2($) {
 	return $clustalw2_cmd;
 }
 
-sub runMrBayes
-{
+sub runMuscle($) {
+	
+}
+
+sub runMrBayes($) {
 	my $self=shift;
 	my $which = `which mb`;chomp $which;
 	my $mb = (-f $which && -e $which) ? $which : GATE::Error::checkPath($self->{"software:mb"});
