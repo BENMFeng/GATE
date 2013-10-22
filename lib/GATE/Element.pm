@@ -137,5 +137,10 @@ sub phylgen($) {
 	$self->runClustalW2().$self->runMrBayes();
 }
 
+sub paleogen($){
+	my $self=shift;
+	$self->runCluster();
+}
+
 
 1;

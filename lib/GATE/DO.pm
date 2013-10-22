@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1f,09-22-2013";
+$VERSION = "1.1g,10-22-2013";
 use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
 use lib "$FindBin::Bin/../lib";  ## Bin live in the lib
 use File::Basename qw(basename dirname);
@@ -3169,8 +3169,10 @@ sub runGATK ($$) {
 				$gatk_cmd .= qq(\${bamtools} stats -insert -in $bam > $stats\n);
 				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 		} 
-
-		if (defined $gatk) {
+		if (exists $self->{'rule:var_caller'} && $self->{'rule:var_caller'} =~ /samtools/i) {
+			$gatk_cmd .= $self->runSamtools('bam',$bam,'lib',$lib);
+			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
+		} elsif (defined $gatk) {
 ##Local Realignment
 #------------------
 #Samtools calls short indels with local realignment, but it does not write a modified BAM file after the realignment.
@@ -3384,11 +3386,6 @@ sub runGATK ($$) {
 				$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 			}
 		} 
-		if (exists $self->{'rule:var_caller'} && $self->{'rule:var_caller'} =~ /samtools/i) {
-			$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg - | bcftools view -cg - > $lib.var.vcf &&  vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
-			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
-			$self->{$lib}{"$ref-bam"}=$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bam";
-		}
 		if (exists $self->{"software:sam2reads"}) {
 			my $name=$1 if ($bam=~/([^\/\s]+).bam/);
 			my $sam2reads=GATE::Error::checkPath($self->{"software:sam2reads"});
@@ -3397,10 +3394,10 @@ sub runGATK ($$) {
 			$gatk_cmd .= "\${samtools} view -f 4 $bam | $sam2reads -R1 $name\_unmapped.R1.fastq -R2 $name\_unmapped.R2.fastq -R3 $name\_unmapped.R3.fastq -f fq";
 			$gatk_cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
 		}
-		if (exists $self->{"overlap"} && exists $self->{"sam2bed"} && exists $self->{"msort"}) {
+		if (exists $self->{"software:overlap"} && exists $self->{"software:sam2bed"} && exists $self->{"software:msort"}) {
 			$gatk_cmd .= $self->stat_mappedreads("bam",$bam,"lib",$lib);
 		}
-		if (exists $self->{"sam2bed"}){
+		if (exists $self->{"software:sam2bed"}){
 			my $bed="$1.bed" if ($bam=~/([^\/\s]+)\.bam$/);
 			$gatk_cmd .= qq( [[ -f $bed ]] || \${samtools} view -F4 $bam | $self->{"sam2bed"} -u -n > $bed\n);
 			push @{$self->{'LIB'}{$lib}{'INPUT'}{'BED'}},$self->{'-workdir'}."/".$self->{"setting:var_outdir"}."/$lib/$bed";
@@ -3413,6 +3410,34 @@ sub runGATK ($$) {
 	$gatk_cmd  =~ s/\&*\s*$/\n/;
 	$gatk_cmd .= "cd ..\n";
 	return $gatk_cmd;
+}
+
+sub runSamtools ($$) {
+	my ($self,%attrs) = @_;
+	my $bam=$attrs{'bam'};
+	my $lib=$attrs{'lib'};
+	my $cmd="";
+	my $bcftools_para= "";
+	if (exists $self->{"setting:bcftools:view"}){
+		$bcftools_para=$self->{"setting:bcftools:view"};
+	}
+	elsif (exists $self->{"setting:bcftools"}){
+		$bcftools_para=$self->{"setting:bcftools"};
+	}
+	$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg $bcftools_para - | bcftools view -cg - > $lib.var.vcf && ";
+	my $vcfutils_para="";
+	if (exists $self->{"setting:vcfutils:varFilter"}){
+		$vcfutils_para=$self->{"setting:vcfutils:varFilter"};
+	}elsif(exists $self->{"setting:vcfutils"}){
+		$vcfutils_para=$self->{"setting:vcfutils"};
+	}
+	if ($vcfutils_para ne ""){
+		$cmd .= "vcfutils.pl varFilter $vcfutils_para $lib.var.vcf > $lib.var.flt.vcf";
+	} else {
+		$cmd .= "vcfutils.pl varFilter -D100 $lib.var.vcf > $lib.var.flt.vcf";
+	}
+	$cmd .= (exists $self->{"rule:multimode"}) ? " && " : "\n";
+	return $cmd;
 }
 
 sub runGATKfilter ($) {
@@ -5273,14 +5298,70 @@ sub runMrBayes($) {
 	return $mb_cmd;
 }
 
+#Cluster 3.0, command-line version.
 sub runCluster ($) {
-#cluster -f tabfile -l -cg m -ca a -na -e 7	
+#cluster -f tabfile -l -cg m -ca a -na -e 7
+	my $self=shift;
+	my $which = `which cluster`;chomp $which;
+	my $cluster = (-f $which && -e $which) ? $which : GATE::Error::checkPath($self->{"software:cluster"});
+	if (!defined $cluster || -e $cluster){
+		return "";
+	}
+	my $para=(exists $self->{"setting:cluster"})?$self->{"setting:cluster"}:"-l -cg m -ca a -na -e 7";
+	my $cluster_cmd = qq(echo `date`; echo "run Cluster3"\n);
+	$cluster_cmd .= qq(export workdir=$workdir\n);
+	$cluster_cmd .= qq(cd \${wordir}\n);
+	$cluster_cmd .= qq(cd \${wordir}\n);
+	if (exists $self->{"setting:cluster_outdir"}){
+		$cluster_cmd .= qq(mkdir -p $self->{"setting:cluster_outdir"}\n);
+		$cluster_cmd .= qq(cd $self->{"setting:cluster_outdir"}\n);
+	} else {
+		$cluster_cmd .= qq(mkdir cluster\n);
+		$cluster_cmd .= qq(cd cluster\n);	
+	}
+	my @libraries=sort keys %{$self->{'LIB'}};
+	foreach my $lib(@libraries){
+		$cluster_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) ;
+		$cluster_cmd .= "cd $lib\n"
+		if (-f $self->{$lib}{"cluster"}){
+			for (my $i=0;$i<@{$self->{$lib}{"cluster"}};$i++){
+				my $j=$i+1;
+				my $inputfile=${$self->{$lib}{"cluster"}}[$i];
+				$cluster_cmd =qq($cluster -f $inputfile $para\n);
+				if (exists $self->{"rule:bootstraping"}){
+					Cluster_bootStrapping($inputfile,$para,$self->{"setting:bootstraping:pool"},$self->{"setting:bootstraping:cycle"});
+				}
+			}
+		}
+		$cluster_cmd .= "cd ..\n"
+	}
+	$cluster_cmd .= "cd ..\n"
+	return $cluster_cmd;
+}
+
+sub Cluster_bootStrapping ($) {
+	my $infile=shift;
+	my $para=shift;
+	my $pool=shift;
+	my $cycle=shift;
+	my $cmd=qq([[ -d bootstraping ]] || mkdir bootstraping\n);
+	for my $i(1..$cycle){
+		$cmd.=qq(perl -e 'my (\$file,\$pool)=\@ARGV;my \$lines=\`wc -l \$file\`;chomp \$lines;my \%randpool=\(\);while (keys \%randpool<=\$pool){my \$intrand=int\(rand\(\$lines\)\);\$randpool{\$intrand}=$i if \(\$intrand<\$lines\);}open \(IN,\$file\)||die \$!;\$_=<IN>;print;my \$n=0;my \$c=0;while\(<IN>\){if \(exists \$randpool{\$n}\){print;\$c++;last if \(\$c==\$pool\);}\$n++;}close IN;' $infile $pool > bootstraping/$i.xls\n);
+		$cmd.=qq(cd bootstraping\n);
+		$cmd.=qq(fo i in \`ls *.xls\`;do\n
+\tcluster -f $i $para\n
+done\n);
+		$cmd.=qq(perl -e 'my \@cdt=glob\("*.cdt"\);foreach my \$f\(\@cdt\){my \$atr="\$1.atr" if \(\$f=~\/\(\\S+\)\\.cdt\/\);my \%hash=\(\);open \(IN1,\$f\);\$_=<IN1>;my \@A=split;\$_=<IN1>;my \@B=split;for \(my \$i=1;\$i<\@B;\$i++\){\$hash{\$B[\$i]}=\$A[\$i+2];}open \(IN2,\$atr\);while\(<IN2>\){my \@t=split;\$hash{\$t[0]}="\\\(\$hash{\$t[1]}\,\$hash{\$t[2]}\\\)";print "\$hash{\$t[1]}\\t\$hash{\$t[2]}\\t\$t[3]\\n";}close IN2;}' > score.txt\n);
+		$cmd.=qq(perl -ne 'my \@t=split;my \$out=join "\<\-\>",sort \@t[0,1];print \"\$out\\t\$t[2]\\n"' score.txt |cut -f 1 |sort |uniq -c |sort -nr -k 1 > bootstrapping_result.txt);
+	}
+	return $cmd;
 }
 
 # circos -conf circos.conf
 sub runCirCOS ($) {
 	my $self=shift;
 }
+
 
 #########################################################
 #                                                       #
@@ -5292,8 +5373,24 @@ sub runANFO ($) {
 	
 }
 
-sub mapDamage ($) {
-	
+#double strand
+#perl mapDamage-0.3.3.pl map -i double.bam -r ~/database/GRCh37/hs37d5.fa -l 202 -d ./mapDamage-double -k -c 
+#mapDamage -i double.bam -r ~/database/GRCh37/hs37d5.fa -d ./mapDamage2-double
+#
+#single strand
+#perl mapDamage-0.3.3.pl map -i single.bam -r ~/database/GRCh37/hs37d5.fa -l 101 -d ./mapDamage-single -k -c &
+#mapDamage --single-stranded -i single.bam -r ~/database/GRCh37/hs37d5.fa -d ./mapDamage2-double
+sub runmapDamage ($$) {
+	my $ref=shift;
+	$ref ||= 'ref';
+	my $self=shift;
+	my $mapDamage=GATE::Error::checkPath($self->{"software:mapDamage"};
+	if (!defined $mapDamage || !-e $mapDamage) {
+		return "";
+	}
+	my $mapdamage_cmd = qq(echo `date`; echo "run mapDamage"\n);
+	my @libraries=sort keys %{$self->{'LIB'}};
+
 }
 
 sub runFPSAC ($) {
