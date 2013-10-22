@@ -139,7 +139,7 @@ sub phylgen($) {
 
 sub paleogen($){
 	my $self=shift;
-	$self->runCluster();
+	$self->runmapDamage().$self->runCluster();
 }
 
 

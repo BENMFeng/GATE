@@ -5309,8 +5309,8 @@ sub runCluster ($) {
 	}
 	my $para=(exists $self->{"setting:cluster"})?$self->{"setting:cluster"}:"-l -cg m -ca a -na -e 7";
 	my $cluster_cmd = qq(echo `date`; echo "run Cluster3"\n);
+	$cluster_cmd = .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	$cluster_cmd .= qq(export workdir=$workdir\n);
-	$cluster_cmd .= qq(cd \${wordir}\n);
 	$cluster_cmd .= qq(cd \${wordir}\n);
 	if (exists $self->{"setting:cluster_outdir"}){
 		$cluster_cmd .= qq(mkdir -p $self->{"setting:cluster_outdir"}\n);
@@ -5379,18 +5379,49 @@ sub runANFO ($) {
 #
 #single strand
 #perl mapDamage-0.3.3.pl map -i single.bam -r ~/database/GRCh37/hs37d5.fa -l 101 -d ./mapDamage-single -k -c &
-#mapDamage --single-stranded -i single.bam -r ~/database/GRCh37/hs37d5.fa -d ./mapDamage2-double
+#mapDamage --single-stranded -i single.bam -r ~/database/GRCh37/hs37d5.fa -d ./mapDamage2-single
 sub runmapDamage ($$) {
 	my $ref=shift;
 	$ref ||= 'ref';
-	my $self=shift;
+	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	my $mapDamage=GATE::Error::checkPath($self->{"software:mapDamage"};
 	if (!defined $mapDamage || !-e $mapDamage) {
 		return "";
 	}
 	my $mapdamage_cmd = qq(echo `date`; echo "run mapDamage"\n);
+	$mapdamage_cmd.= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$mapdamage_cmd .= qq(export workdir=$workdir\n);
+	$mapdamage_cmd .= qq(cd \${wordir}\n);
+	my $mapDamage_outdir = "mapDamage";
+	if(exists $self->{"setting:mapDamage:outdir"}){
+		$mapDamage_outdir = $self->{"setting:mapDamage:outdir"};
+	}elsif(exists $self->{"setting:mapDamage_outdir"}){
+		$mapDamage_outdir = $self->{"setting:mapDamage_outdir"};
+		
+	}
+	$mapdamage_cmd .= qq([[ -d $mapDamage_outdir ]] || mkdir $mapDamage_outdir\n) ;
+	$mapdamage_cmd .= qq(cd $mapDamage_outdir\n);
 	my @libraries=sort keys %{$self->{'LIB'}};
-
+	for my $lib(@libraries){
+		$mapdamage_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) ;
+		$mapdamage_cmd .= qq(cd $lib\n);
+		my $bam=$self->{$lib}{"$ref-bam"};
+		if ($mapDamage=~/\.pl$/){
+			if ($self->{$lib}{'strand'} eq "single"){
+				$mapdamage_cmd .= qq($mapDamage map -i $bam -r $reference -l 101 -d ./mapDamage-single -k -c\n);
+			}else{
+				$mapdamage_cmd .= qq($mapDamage map -i $bam -r $reference -l 202 -d ./mapDamage-double -k -c\n);
+			}
+		} else {
+			if ($self->{$lib}{'strand'} eq "single"){
+				$mapdamage_cmd .= qq($mapDamage --single-stranded  -i $bam -r $reference -d ./mapDamage2-single\n);
+			}else{
+				$mapdamage_cmd .= qq($mapDamage -i $bam -r $reference -d ./mapDamage2-double\n);
+			}
+		}
+		$mapdamage_cmd.="cd ..\n";
+	}
+	return $mapdamage_cmd;
 }
 
 sub runFPSAC ($) {
