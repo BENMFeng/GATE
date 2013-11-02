@@ -83,6 +83,11 @@ sub var($) {
 	$self->runGATK().$self->runDindel();
 }
 
+sub gwas($) {
+	my $self=shift;
+	$self->runPlink();
+}
+
 sub exp($) {
 	my $self=shift;
 	$self->runCufflinks('-ref',"yes").$self->runCuffCompare().$self->runCuffMerge();

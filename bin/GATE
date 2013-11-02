@@ -46,7 +46,7 @@ Mainly suitable for generating batch jobs of applications for illumina sequencin
 
 Author: BENM <binxiaofeng@gmail.com>
 
-Version: v0.1.10 nightly, Sep 22th, 2013
+Version: v0.1.11 nightly, Nov 2nd, 2013
 
 =head1 Option
 
@@ -72,6 +72,7 @@ Version: v0.1.10 nightly, Sep 22th, 2013
     diff		differential expression anaylsis
     as			alternative splicing analysis
     var			genomic variation/polymorism analysis, inculding SNV/SNP, INDEL, SV
+    *gwas		GWAS analysis
     peak		find peak for ChIP-Seq
     *edit		gene editing analysis
     fusion		gene fusion analysis
@@ -108,9 +109,10 @@ GetOptions(
 	"debug"=>\$Debug,
 	"help"=>\$Help
 );
+my $latest_version="v0.1.11 nightly, Nov 2nd, 2013";
 my $updateLog=qq(
 GATE.pl -- Genomics Applications, also for Transcriptomics & Epgenetics analysis pipeline
-Latest Version: v0.1.7 nightly, May 13th, 2013
+Latest Version: v0.1.10 nightly, Sep 22th, 2013
 0.1.0 alpha, Sep 12th, 2012
 0.1.0 beta, Sep 20th, 2012
 0.1.1 gamma, Oct 31th, 2012
@@ -120,6 +122,10 @@ Latest Version: v0.1.7 nightly, May 13th, 2013
 0.1.5 nightly, Mar 18th, 2013
 0.1.6 nightly, May 8th, 2013
 0.1.7 nightly, May 13th, 2013
+0.1.8 nightly, Aug 1st, 2013
+0.1.9 nightly, Sep 10th, 2013
+0.1.10 nightly, Sep 22th, 2013
+0.1.11 nightly, Nov 2nd, 2013
 );
 my $instruction=qq(
 ## ==>config.example<==
@@ -278,7 +284,7 @@ die $podtext,"\n" if ((@ARGV==0)||(!defined $Configure)||($Help));
 $Workdir ||= "./";
 $Prefix ||= "pipeline";
 my $gate=GATE->new('-config',$Configure,'-workdir',$Workdir);
-$gate->GATE::Extension::run_log($Verbose);
+$gate->GATE::Extension::run_log($Verbose,$latest_version);
 #print qq(chdir $gate->{'-workdir'}\n);
 $gate->parseDir();
 $gate->parseConfig();
@@ -289,9 +295,10 @@ if (defined $Debug)
 }
 
 # parsing command line
-my %cmd_hash = (denovo=>\&denovo, abinito=>\&abinito,
-qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var,
-edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, phylogen=>\&phylogen
+my %cmd_hash = (bc=>\&bc, denovo=>\&denovo, abinito=>\&abinito,
+qc=>\&qc, aln=>\&aln, exp=>\&expr, diff=>\&diff, as=>\&as, var=>\&var, gwas=>\&gwas,
+edit=>\&edit, fusion=>\&fusion, ncrna=>\&ncrna, anno=>\&anno, repeat=>\&repeat, 
+phylogen=>\&phylogen, paleo=>\&paleo
 );
 my @cmd_ary = qw(bc qc aln var exp diff as peak plot denovo abinito fusion phylogen);
 

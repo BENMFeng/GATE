@@ -3795,11 +3795,16 @@ sub runCRISP ($) {
 	my $self = shift;
 }
 
-sub runPlink ($) {
+sub runCNVNator ($) {
 	
 }
 
-sub runCNVNator ($) {
+#########################################################
+#                                                       #
+#                         GWAS                          #
+#                                                       #
+#########################################################
+sub runPlink ($) {
 	
 }
 
@@ -4467,9 +4472,19 @@ v\\);
 
 sub runHTSeq ($) {
 	my $self = shift;
+#htseq-count accepted_hits.sam ref.gff
 }
 
 sub runDESeq ($) {
+#library("DESeq")
+#countsTable <- read.table("~/Desktop/test.txt",row.names=1)
+#conds<-c("A", "B")
+#cds <- newCountDataSet(countsTable, conds)
+#cds <- estimateSizeFactors(cds)
+#cds <- estimateDispersions(cds, method="blind", sharingMode="fit-only", fitType="local")
+#res <- nbinomTest( cds, "A", "B")
+#write.table(res,'~/Desktop/result_pvalue.txt',sep="\t") 
+#plotMA(res)
 	my $self = shift;
 	if (!exists $self->{"rule:DESeq"}) {
 		return "";
@@ -4573,6 +4588,10 @@ sub runAlternativeSplicing($) {
 	}
 	$runAS_cmd .= "cd ..\n";
 	return ($runAS_cmd);
+}
+
+sub runMISO($) {
+#python $MISO/misopy/run_events_analysis.py --compute-genes-psi $MISO/index/indexed_SE_events/ ./tophat/accepted_hits.bam --output-dir $prefix.$insert --read-len 100
 }
 
 sub runASAP ($) {
@@ -5296,6 +5315,10 @@ sub runMrBayes($) {
 	}
 	$mb_cmd.="cd ..\n";
 	return $mb_cmd;
+}
+
+sub runBEAST($){
+#java -Xms1024m -Xmx1024m -jar lib\beast.jar
 }
 
 #Cluster 3.0, command-line version.

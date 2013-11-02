@@ -250,6 +250,7 @@ ggplot\(data=data, aes\(x=log\(coverage\), y=loci, color=prep_type\)\) +
 sub run_log ($) {
 	my $self = shift;
 	my $verbose = shift;
+	my $latest_version = shift;
 	my $user = `whoami`;chomp $user;
 	my $finger_cmd = qq(finger |grep $user|perl -ne 'if\(\/\(\\d+\\.\\d+\\.\\d+\\.\\d+\)\/\){print "\$1\\n"}' |tail -1);
 	my $login = `$finger_cmd`;chomp $login;
@@ -267,9 +268,9 @@ sub run_log ($) {
 	}
 	my $date_cmd=qq(date +"\%Y-\%m-\%d \%H:\%M:\%S");
 	my $date=`$date_cmd`;chomp $date;
-	my $cmd=qq(echo "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.10 nightly, Sep 22th, 2013");
+	my $cmd=qq(echo "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: $latest_version");
 	system $cmd if ($verbose);
-	my $further_cmd=qq(echo -s "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: v0.1.7 nightly, May 13th, 2013" | mail -s "GATE running log" GATE.BENM\@gmail.com);
+	my $further_cmd=qq(echo -s "[$date] Login IP: $login; Executing as $user$iphost on $info $description; GATE version: $latest_version" | mail -s "GATE running log" GATE.BENM\@gmail.com);
 	system $further_cmd;
 }
 
