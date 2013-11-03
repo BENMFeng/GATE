@@ -112,7 +112,11 @@ GetOptions(
 my $latest_version="v0.1.11 nightly, Nov 2nd, 2013";
 my $updateLog=qq(
 GATE.pl -- Genomics Applications, also for Transcriptomics & Epgenetics analysis pipeline
+<<<<<<< HEAD
 Latest Version: v0.1.10 nightly, Sep 22th, 2013
+=======
+Latest Version: v0.1.10 nightly, Sup 22th, 2013
+>>>>>>> 7bb5160570b287bfbba289b8fa0dbd3ab9f974e7
 0.1.0 alpha, Sep 12th, 2012
 0.1.0 beta, Sep 20th, 2012
 0.1.1 gamma, Oct 31th, 2012
@@ -122,10 +126,16 @@ Latest Version: v0.1.10 nightly, Sep 22th, 2013
 0.1.5 nightly, Mar 18th, 2013
 0.1.6 nightly, May 8th, 2013
 0.1.7 nightly, May 13th, 2013
+<<<<<<< HEAD
 0.1.8 nightly, Aug 1st, 2013
 0.1.9 nightly, Sep 10th, 2013
 0.1.10 nightly, Sep 22th, 2013
 0.1.11 nightly, Nov 2nd, 2013
+=======
+0.1.8 nightly, Aug 1th, 2013
+0.1.9 nightly, Sup 10th, 2013
+0.1.10 nightly, Sup 22th, 2013
+>>>>>>> 7bb5160570b287bfbba289b8fa0dbd3ab9f974e7
 );
 my $instruction=qq(
 ## ==>config.example<==
