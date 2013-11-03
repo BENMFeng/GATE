@@ -3424,7 +3424,7 @@ sub runSamtools ($$) {
 	elsif (exists $self->{"setting:bcftools"}){
 		$bcftools_para=$self->{"setting:bcftools"};
 	}
-	$gatk_cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg $bcftools_para - | bcftools view -cg - > $lib.var.vcf && ";
+	$cmd .= "\${samtools} mpileup -ugf \$REFERENCE $bam | bcftools view -bvcg $bcftools_para - | bcftools view -cg - > $lib.var.vcf && ";
 	my $vcfutils_para="";
 	if (exists $self->{"setting:vcfutils:varFilter"}){
 		$vcfutils_para=$self->{"setting:vcfutils:varFilter"};
@@ -5332,7 +5332,8 @@ sub runCluster ($) {
 	}
 	my $para=(exists $self->{"setting:cluster"})?$self->{"setting:cluster"}:"-l -cg m -ca a -na -e 7";
 	my $cluster_cmd = qq(echo `date`; echo "run Cluster3"\n);
-	$cluster_cmd = .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	$cluster_cmd .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$cluster_cmd .= qq(export workdir=$workdir\n);
 	$cluster_cmd .= qq(cd \${wordir}\n);
 	if (exists $self->{"setting:cluster_outdir"}){
@@ -5344,13 +5345,13 @@ sub runCluster ($) {
 	}
 	my @libraries=sort keys %{$self->{'LIB'}};
 	foreach my $lib(@libraries){
-		$cluster_cmd .= qq([[ -d $lib ]] || mkdir $lib\n) ;
-		$cluster_cmd .= "cd $lib\n"
+		$cluster_cmd .= qq([[ -d $lib ]] || mkdir $lib\n);
+		$cluster_cmd .= "cd $lib\n";
 		if (-f $self->{$lib}{"cluster"}){
 			for (my $i=0;$i<@{$self->{$lib}{"cluster"}};$i++){
 				my $j=$i+1;
-				my $inputfile=${$self->{$lib}{"cluster"}}[$i];
-				$cluster_cmd =qq($cluster -f $inputfile $para\n);
+				my $inputfile = ${$self->{$lib}{"cluster"}}[$i];
+				$cluster_cmd = qq($cluster -f $inputfile $para\n);
 				if (exists $self->{"rule:bootstraping"}){
 					Cluster_bootStrapping($inputfile,$para,$self->{"setting:bootstraping:pool"},$self->{"setting:bootstraping:cycle"});
 				}
@@ -5358,7 +5359,7 @@ sub runCluster ($) {
 		}
 		$cluster_cmd .= "cd ..\n"
 	}
-	$cluster_cmd .= "cd ..\n"
+	$cluster_cmd .= "cd ..\n";
 	return $cluster_cmd;
 }
 
@@ -5404,15 +5405,17 @@ sub runANFO ($) {
 #perl mapDamage-0.3.3.pl map -i single.bam -r ~/database/GRCh37/hs37d5.fa -l 101 -d ./mapDamage-single -k -c &
 #mapDamage --single-stranded -i single.bam -r ~/database/GRCh37/hs37d5.fa -d ./mapDamage2-single
 sub runmapDamage ($$) {
+	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
 	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
-	my $mapDamage=GATE::Error::checkPath($self->{"software:mapDamage"};
+	my $mapDamage=GATE::Error::checkPath($self->{"software:mapDamage"});
 	if (!defined $mapDamage || !-e $mapDamage) {
 		return "";
 	}
 	my $mapdamage_cmd = qq(echo `date`; echo "run mapDamage"\n);
 	$mapdamage_cmd.= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
+	my $workdir=GATE::Error::checkPath($self->{"-workdir"});
 	$mapdamage_cmd .= qq(export workdir=$workdir\n);
 	$mapdamage_cmd .= qq(cd \${wordir}\n);
 	my $mapDamage_outdir = "mapDamage";
