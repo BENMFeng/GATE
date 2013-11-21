@@ -14,6 +14,10 @@ if (@ARGV!=0)
 		if (/^\@\S+\:(\d+\:\d+\:\d+\:\d+)/ || /^\@([^\/\s]+)/){
 			$hash{$1}=1;
 			<>;<>;<>;
+			next;
+		}
+		elsif (/^\>(\S+)/){
+			$hash{$1}=1;
 		}
 	}
 }
@@ -24,11 +28,13 @@ if (keys %hash>0)
 {
 	foreach my $file($Fastq1,$Fastq2) {
 		my $pair=$file;
+		$pair=~s/out$/pair\.fq/i;
 		$pair=~s/fq$/pair\.fq/i;
 		$pair=~s/fastq$/pair\.fastq/i;
 		$pair=~s/fq\.gz$/pair\.fq/i;
 		$pair=~s/fastq\.gz$/pair\.fastq/i;
 		my $single=$file;
+		$single=~s/out$/single\.fq/i;
 		$single=~s/fq$/single\.fq/i;
 		$single=~s/fastq$/single\.fastq/i;
 		$single=~s/fq\.gz$/single\.fq/i;
