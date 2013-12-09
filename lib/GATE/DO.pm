@@ -116,7 +116,7 @@ sub parseConfig($) {
 			if (/([^\=]+)\=([^\=]+)/) {
 				my ($lib,$path)=($1,$2);
 				if ($name =~ /software/) {
-					if ($lib=~/^([\s\=]+)/) {
+					if ($lib=~/^([^\s\=]+)/) {
 						$path=GATE::Error::checkPath($path); 
 						$softtool=$lib;
 						$self->{"$name:$lib"} = $path;
@@ -145,6 +145,12 @@ sub parseDir($) {
 	$Workdir="$workpath/$Workdir" if ($Workdir !~ /^\//);
 	$Workdir=~s/[\/\s\.]+$//;
 	$self->{'-workdir'}=$Workdir;
+}
+
+sub getcwd {
+	my $dir=`pwd`;
+	chomp $dir;
+	return $dir;
 }
 
 sub getlibInput ($) {
@@ -3062,7 +3068,7 @@ sub runGATK ($$) {
 		if (!exists $self->{$lib}{"$ref-bam"}) {
 			my @BAM=();
 			if (exists $self->{$lib}{"$ref-bwabam"}) {
-				@BAM=@{${$self->{$lib}{"$ref-bwabam"}}};
+				@BAM=@{$self->{$lib}{"$ref-bwabam"}};
 			}elsif(exists $self->{$lib}{"$ref-bowtiebam"}){
 				@BAM=@{$self->{$lib}{"$ref-bowtiebam"}};
 			}elsif(exists $self->{$lib}{"$ref-soapbam"}){
