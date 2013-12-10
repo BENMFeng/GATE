@@ -124,8 +124,11 @@ sub parseConfig($) {
 						$self->{"setting:$softtool:$1"} = $2;
 					}
 				}
-				if ($name =~ /database/) {
+				elsif ($name =~ /database/) {
 					$path=GATE::Error::checkPath($path); 
+					$self->{"$name:$lib"} = $path;
+				}
+				else {
 					$self->{"$name:$lib"} = $path;
 				}
 			}
