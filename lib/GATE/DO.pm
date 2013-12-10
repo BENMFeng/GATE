@@ -19,7 +19,7 @@ package GATE::DO;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = "1.1g,10-22-2013";
+$VERSION = "1.1h,12-10-2013";
 use FindBin qw($Bin $Script);    ## Find me? I (Binxiao) am here.
 use lib "$FindBin::Bin/../lib";  ## Bin live in the lib
 use File::Basename qw(basename dirname);
@@ -2067,9 +2067,10 @@ sub runBWA($$) {
 	$bwa_cmd .= qq(export REFERENCE="$reference"\n);
 	my $alnpara=$self->{'setting:bwaaln'} if (exists $self->{'setting:bwaaln'});
 	my $mempara=$self->{'setting:bwamem'} if (exists $self->{'setting:bwamem'});
+	my $multithreads=$self->{'setting:multithreads'};
 	if ($alnpara!~/\-t\s+\d+/ && exists $self->{'setting:multithreads'})
 	{
-		$alnpara.=" -t ".$self->{'setting:multithreads'};
+		$alnpara.=" -t $multithreads";
 	}
 	$bwa_cmd .= qq(export alnpara="$alnpara"\n) if (defined $alnpara);
 	$bwa_cmd .= qq(export mempara="$mempara"\n) if (defined $mempara);
@@ -2129,9 +2130,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.$k.bam\n";
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.pair.$k.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.bam $lib.pair.$k.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.pair.$k.bam $lib.pair.$k.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.pair.$k.sort.bam\n";
 						$bam="$lib.pair.$k.sort.bam";
 					} else {
@@ -2148,9 +2149,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.pair.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.bam $lib.pair.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.pair.bam $lib.pair.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.pair.sort.bam\n";
 						$bam="$lib.pair.sort.bam";
 					}
@@ -2183,9 +2184,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= qq(\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.$k.bam\n);
+						$bwa_cmd .= qq(\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.pair.$k.bam\n);
 						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.$k.bam $lib.pair.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.$k.bam $lib.pair.$k.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.pair.$k.bam $lib.pair.$k.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.pair.$k.sort.bam\n";
 						$bam="$lib.pair.$k.sort.bam";
 					} else {
@@ -2203,9 +2204,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq1'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -Sbh - -o $lib.pair.bam\n";
+						$bwa_cmd .= "\${bwa} sampe $sampepara -a $PI -r $rg \$REFERENCE $sai1 $sai2 ${$fq{1}}[$j] ${$fq{2}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.pair.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.pair.bam $lib.pair.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.pair.bam $lib.pair.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.pair.bam $lib.pair.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.pair.sort.bam\n";
 						$bam="$lib.pair.sort.bam";
 					}
@@ -2266,9 +2267,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.single.$k.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.$k.bam $lib.single.$k.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.single.$k.bam $lib.single.$k.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.single.$k.sort.bam\n";
 						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.$k.sort.bam";
 					} else {
@@ -2285,9 +2286,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.bam\n";
+						$bwa_cmd .= "\${bwa} mem \${mempara} -R $rg \$REFERENCE ${$fq{0}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.single.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.bam $lib.single.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.single.bam $lib.single.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.single.sort.bam\n";
 						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.sort.bam";
 					}
@@ -2314,9 +2315,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.$k.bam\n";
+						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.single.$k.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.single.$k.bam $lib.single.$k.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -\@ 8 -m 3G  $lib.single.$k.bam $lib.single.$k.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -\@ 8 -m 3G  $lib.single.$k.bam $lib.single.$k.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.single.$k.sort.bam\n";
 						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.$k.sort.bam";
 					} else {
@@ -2333,9 +2334,9 @@ sub runBWA($$) {
 								$rg.=qq(\\t$rb:$self->{$lib}{'fq'}{$j}{$rb}');
 							}
 						}
-						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -Sbh - -o $lib.single.bam\n";
+						$bwa_cmd .= "\$bwa samse $samsepara -r $rg \$REFERENCE $sai1 ${$fq{0}}[$j] | \${samtools} view -@ $multithreads -Sbh - -o $lib.single.bam\n";
 						#$bwa_cmd .= "\${samtools} rmdup $lib.single.bam $lib.single.rmdup.bam\n";
-						$bwa_cmd .= "\${samtools} sort -m 3000000000 $lib.single.bam $lib.single.sort\n";
+						$bwa_cmd .= "\${samtools} sort -@ $multithreads -m 3000000000 $lib.single.bam $lib.single.sort\n";
 						$bwa_cmd .= "\${samtools} index $lib.single.sort.bam\n";
 						push @{$self->{$lib}{"$ref-bwabam"}},$self->{'-workdir'}."/".$self->{"setting:aln_outdir"}."/$lib/$lib.single.sort.bam";
 					}
@@ -2352,7 +2353,7 @@ sub runBWA($$) {
 			my $bam="$lib.merge.bam";
 			$bwa_cmd .= "\${samtools} index $lib.merge.bam\n";
 			if (!exists $self->{rmdup} || GATE::Error::boolean($self->{rmdup})==1) {
-				$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort - $lib.merge.rmdup.sort\n";
+				$bwa_cmd .= "\${samtools} rmdup $lib.merge.bam - | \${samtools} rmdup -S - - | \${samtools} sort -@ $multithreads - $lib.merge.rmdup.sort\n";
 				$bam="$lib.merge.rmdup.sort.bam";
 				$bwa_cmd .= "\${samtools} index $bam\n";
 			}
