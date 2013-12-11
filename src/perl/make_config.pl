@@ -61,6 +61,10 @@ foreach my $myfile(@filenames)
 			print "SM=$SM[$sm_n]\n";
 			$sm_n++ unless ($sm_n==@SM-1);
 		}
+		else
+		{
+			print "SM=$lb" if ($lb ne $prelb);
+		}
 		if (defined $index)
 		{
 			print "Index=$Index[$index_n]\n";
