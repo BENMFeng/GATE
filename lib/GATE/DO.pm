@@ -2998,7 +2998,7 @@ sub runGATK ($$) {
 	my $self=shift;
 	my $ref=shift;
 	$ref ||= 'ref';
-	my $gatk_cmd = qq(echo `date`; echo "run Samtools-Picard-GATK"\n);
+	my $gatk_cmd = qq(echo `date`;echo "run Samtools-Picard-GATK"\n);
 	$gatk_cmd .= qq(export PATH="$self->{"setting:PATH"}":\$PATH\n) if (exists $self->{"setting:PATH"} && $self->{"setting:PATH"}!~/\/usr\/local\/bin/);
 	my $reference=GATE::Error::checkPath($self->{"database:$ref"});
 	$gatk_cmd .= qq(export REFERENCE="$reference"\n);

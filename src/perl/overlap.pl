@@ -2,7 +2,7 @@
 
 =head1 Announcement
 
-Copyright (c) 2008-2012 BENM(Binxiao) Feng                            
+Copyright (c) 2008-2013 BENM(Binxiao) Feng                            
 All Rights Reserved.                                                   
 Send all comments to BENM - BinxiaoFeng@gmail.com                     
 
@@ -17,7 +17,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License     
 along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 
-overlap.pl  --  overlapping data cruncing relations between one or two block sets
+overlap.pl  --  overlapping data crunching relations between one or two block sets
 
 =head1 Description
 
