@@ -6,7 +6,7 @@ Bioinformatics Stargate --
 **G**enomics integrated **A**pplications, also for **T**ranscriptomics, **E**pigenetics, Evolution empirical analysis pipeline.
 Mainly suitable for generating batch jobs of applications for illumina sequencing platform.
 
-  Copyright (c) 2012 - 2013 - BENM(Binxiao) Feng                        
+  Copyright (c) 2012 - 2014 - BENM(Binxiao) Feng                        
   All Rights Reserved                                                   
   Send all comments to BENM - BinxiaoFeng\@gmail.com                     
                                                                         
